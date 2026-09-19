@@ -13,6 +13,14 @@
     "dev-tools"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vidux/laracrew.git"
+  },
+  "homepage": "https://github.com/vidux/laracrew#readme",
+  "bugs": {
+    "url": "https://github.com/vidux/laracrew/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"
