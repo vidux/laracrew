@@ -63,7 +63,7 @@ export const waitForExit = (child: ChildProcess, timeoutMs: number): Promise<boo
 
 export interface StopLadderOptions {
   child: ChildProcess;
-  /** Step 1: Laravel-native graceful shutdown, e.g. `php artisan queue:restart`. */
+  /** Step 1: the service's own graceful shutdown, e.g. `php artisan queue:restart`. */
   graceful?: () => Promise<void>;
   signal: NodeJS.Signals;
   graceMs: number;
@@ -74,7 +74,7 @@ export type StopOutcome = 'graceful' | 'signal' | 'tree-kill' | 'already-gone' |
 
 /**
  * Ordered stop, each step only attempted if the previous one timed out:
- *   1. Laravel graceful  (worker finishes its current job, then exits by itself)
+ *   1. Graceful command  (the process finishes what it holds, then exits by itself)
  *   2. Signal            (POSIX only — Windows has no real SIGTERM)
  *   3. Tree kill         (taskkill /T /F, or kill the process group)
  */

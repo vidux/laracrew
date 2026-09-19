@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { ConfigError } from '../core/config/errors.js';
 import { listStacks } from '../core/config/load.js';
@@ -10,7 +13,31 @@ import { logsCommand } from './commands/logs.js';
 import { lsCommand } from './commands/ls.js';
 import { upCommand } from './commands/up.js';
 
-export const VERSION = '0.1.0';
+/** Replaced by tsup at build time; only the `tsx` dev path falls through to the lookup below. */
+declare const __LARACREW_VERSION__: string | undefined;
+
+/** Walks up from this file to laracrew's own package.json — the depth differs dev vs bundled. */
+const versionFromPackageJson = (): string => {
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  for (let up = 0; up < 5; up += 1) {
+    try {
+      const pkg = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')) as {
+        name?: string;
+        version?: string;
+      };
+      if (pkg.name === 'laracrew' && pkg.version) return pkg.version;
+    } catch {
+      /* keep walking */
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return '0.0.0-unknown';
+};
+
+export const VERSION =
+  typeof __LARACREW_VERSION__ === 'string' ? __LARACREW_VERSION__ : versionFromPackageJson();
 
 /**
  * Picks the stack when the user did not name one: the configured default, else the only
@@ -40,7 +67,7 @@ export const buildProgram = (): Command => {
 
   program
     .name('laracrew')
-    .description('Boot and supervise all the long-running processes of your Laravel projects with one command.')
+    .description('Boot and supervise all the long-running processes of your projects with one command.')
     .version(VERSION, '-v, --version')
     .showHelpAfterError();
 

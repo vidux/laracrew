@@ -167,7 +167,7 @@ hooks:
 | `ready` | object | `tcp` \| `http` \| `logMatch` \| `delayMs`; default: process spawned = ready |
 | `restart` | enum | `never` \| `on-failure` \| `always` |
 | `backoff` | object | `initialMs`, `maxMs`, `factor`, `maxRestarts` |
-| `stop` | object | `artisan` (graceful command), `signal`, `graceMs` |
+| `stop` | object | `exec` (any graceful command), `artisan` (sugar for one that runs artisan), `signal`, `graceMs` |
 | `watch` | object | `paths`, `ignore`, `strategy`, `debounceMs` |
 | `metrics` | object | `queues: string[]`, `streams: [{key, group}]` |
 | `url` | string | Enables `laracrew open <service>` and a clickable footer hint |
@@ -187,6 +187,34 @@ hooks:
 | `defaults` | Applied to every service, overridable per service. |
 | `profiles` | Named `only` / `except` filters. |
 | `hooks` | `preUp` / `postDown`. Parsed, not yet executed. |
+
+### Graceful stop (`stop`)
+
+Step 1 of the stop ladder. `exec` is any command that asks the process to finish what it is
+holding and exit by itself; laracrew then waits `graceMs` before escalating to the signal and
+the tree kill. It runs in the service's `cwd`, with the service's environment.
+
+```yaml
+stop: { exec: ["celery", "-A", "app", "control", "shutdown"], graceMs: 20000 }
+stop: { exec: "npm run drain", graceMs: 5000 }
+stop: { exec: ["docker", "compose", "stop"], graceMs: 30000 }
+```
+
+`artisan` is shorthand for the Laravel case — `stop: { artisan: "queue:restart" }` resolves to
+`<project php> artisan queue:restart`, run from the project root even if the service sets its own
+`cwd`. It therefore requires a `project`; a service without one must use `exec`, and saying so is
+a config error rather than a silently skipped step.
+
+A service may declare one or the other, not both. A service that declares its own graceful step
+replaces whatever `defaults.stop` inherited, in either direction — so a stack can default to
+`artisan: queue:restart` for its Laravel workers and still give one Node service its own `exec`.
+
+| Field | Default | Notes |
+|---|---|---|
+| `exec` | — | Any command, string or argv array. Runs in the service `cwd`, 15s timeout |
+| `artisan` | — | Sugar for an `exec` that runs artisan; needs a `project` |
+| `signal` | `SIGTERM` | Step 2. Ignored on Windows, which has no equivalent |
+| `graceMs` | `10000` | How long each step is given before the next one is tried |
 
 ## 4. Tasks — `~/.laracrew/tasks/reset.yaml`
 

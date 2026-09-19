@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { ConfigError } from '../../core/config/errors.js';
-import type { ResolvedProject, ResolvedStack } from '../../core/config/resolve.js';
-import { isPortFree, tcpProbe } from '../../core/health/probes.js';
+import type { ResolvedProject, ResolvedService, ResolvedStack } from '../../core/config/resolve.js';
+import { describeProbe, httpProbe, isPortFree, tcpProbe } from '../../core/health/probes.js';
 import { runOnce } from '../../core/process/spawn.js';
 import { paint } from '../render/colors.js';
 import { prepareStack } from './up.js';
@@ -15,17 +15,78 @@ export interface Finding {
 
 const PORT_IN_COMMAND = /--port[= ](\d{2,5})/g;
 
+/** The command line a service will actually run, in one form the pattern checks can match. */
+const commandLine = (service: ResolvedService): string => {
+  if (!service.command) return '';
+  return service.command.kind === 'shell'
+    ? service.command.line
+    : [service.command.file, ...service.command.args].join(' ');
+};
+
+/** `php`, `php8.2`, `C:\php\php.exe` — anywhere in the line, not just at the front. */
+const PHP_BINARY = /(^|[\\/\s"'])php[\d.]*(\.exe)?(\s|$)/i;
+
+/**
+ * Which projects are PHP projects at all.
+ *
+ * laracrew supervises any process, so a stack can be pure Node, Python or Go. Running
+ * `php --version` for those projects is noise on a machine that has PHP and a blocking
+ * error on one that does not — so every Laravel-specific check is gated on this.
+ */
+const phpProjects = (stack: ResolvedStack): Set<string> => {
+  const keys = new Set<string>();
+  for (const service of stack.services) {
+    const key = service.project?.key;
+    if (!key) continue;
+    const line = commandLine(service);
+    const php = stack.projects[key]?.php;
+    // `stop.artisan` runs `<php> artisan ...`, so it needs PHP whatever the service itself is.
+    if (service.stop.artisan || PHP_BINARY.test(line) || (php !== undefined && line.startsWith(php))) {
+      keys.add(key);
+    }
+  }
+  return keys;
+};
+
+/** Env keys whose value being "redis" means the project talks to Redis. */
+const REDIS_DRIVER_KEYS = [
+  'QUEUE_CONNECTION',
+  'CACHE_STORE',
+  'CACHE_DRIVER',
+  'SESSION_DRIVER',
+  'BROADCAST_CONNECTION',
+  'BROADCAST_DRIVER',
+];
+
+/**
+ * Which projects talk to Redis — from their own env, or from what their services run.
+ * Without this every project defaults to 127.0.0.1:6379, so two Node projects with no
+ * `.env` would be reported as sharing a Redis namespace neither of them uses.
+ */
+const redisProjects = (stack: ResolvedStack): Set<string> => {
+  const keys = new Set<string>();
+
+  for (const [key, project] of Object.entries(stack.projects)) {
+    const declared = Object.keys(project.env).some((name) => name.startsWith('REDIS_'));
+    const driver = REDIS_DRIVER_KEYS.some((name) => project.env[name]?.toLowerCase() === 'redis');
+    if (declared || driver) keys.add(key);
+  }
+
+  for (const service of stack.services) {
+    const key = service.project?.key;
+    if (!key) continue;
+    // Horizon is Redis-only, and declared metrics are read straight off Redis.
+    if (service.metrics || /\b(redis|horizon)\b/i.test(commandLine(service))) keys.add(key);
+  }
+
+  return keys;
+};
+
 /** Ports the stack will try to bind: ${port:N} tokens plus anything passed as --port. */
 export const declaredPorts = (stack: ResolvedStack): number[] => {
   const ports = new Set<number>(stack.ports);
   for (const service of stack.services) {
-    const line =
-      service.command?.kind === 'shell'
-        ? service.command.line
-        : service.command
-          ? [service.command.file, ...service.command.args].join(' ')
-          : '';
-    for (const match of line.matchAll(PORT_IN_COMMAND)) {
+    for (const match of commandLine(service).matchAll(PORT_IN_COMMAND)) {
       const port = Number(match[1]);
       if (Number.isInteger(port)) ports.add(port);
     }
@@ -33,8 +94,22 @@ export const declaredPorts = (stack: ResolvedStack): number[] => {
   return [...ports].sort((a, b) => a - b);
 };
 
-const redisTargetOf = (project: ResolvedProject): string =>
-  `${project.env.REDIS_HOST ?? '127.0.0.1'}:${project.env.REDIS_PORT ?? '6379'}`;
+/** redis://[user:pass@]host:port[/db] — the usual form outside Laravel. */
+const parseRedisUrl = (url: string): { host: string; port: string } | undefined => {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname ? { host: parsed.hostname, port: parsed.port || '6379' } : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const redisTargetOf = (project: ResolvedProject): string => {
+  const url = project.env.REDIS_URL ? parseRedisUrl(project.env.REDIS_URL) : undefined;
+  const host = project.env.REDIS_HOST ?? url?.host ?? '127.0.0.1';
+  const port = project.env.REDIS_PORT ?? url?.port ?? '6379';
+  return `${host}:${port}`;
+};
 
 /** Laravel's Str::slug($value, '_'). */
 const slug = (value: string): string =>
@@ -55,7 +130,7 @@ export const redisPrefixOf = (project: ResolvedProject): string =>
 const redisNamespaceOf = (project: ResolvedProject): string =>
   `${redisTargetOf(project)}/${project.env.REDIS_DB ?? '0'}#${redisPrefixOf(project)}`;
 
-const checkProjects = (stack: ResolvedStack): Finding[] => {
+const checkProjects = (stack: ResolvedStack, php: Set<string>, redis: Set<string>): Finding[] => {
   const findings: Finding[] = [];
 
   for (const project of Object.values(stack.projects)) {
@@ -63,14 +138,16 @@ const checkProjects = (stack: ResolvedStack): Finding[] => {
       findings.push({ level: 'error', message: `project "${project.key}": path does not exist — ${project.path}` });
       continue;
     }
-    if (!existsSync(path.join(project.path, 'artisan'))) {
+    // Only a project something runs `php` for is expected to have an artisan file.
+    if (php.has(project.key) && !existsSync(path.join(project.path, 'artisan'))) {
       findings.push({
         level: 'warn',
         message: `project "${project.key}": no \`artisan\` file in ${project.path}`,
         hint: 'laracrew will still run the commands, but this does not look like a Laravel root',
       });
     }
-    if (Object.keys(project.env).length === 0) {
+    // A Node or Python project with no .env is normal; one whose checks need it is not.
+    if (Object.keys(project.env).length === 0 && (php.has(project.key) || redis.has(project.key))) {
       findings.push({
         level: 'warn',
         message: `project "${project.key}": ${project.envFile} is missing or empty`,
@@ -83,9 +160,10 @@ const checkProjects = (stack: ResolvedStack): Finding[] => {
 };
 
 /** The check that pays for this whole command: two apps quietly sharing one Redis namespace. */
-const checkRedisCollisions = (stack: ResolvedStack): Finding[] => {
+const checkRedisCollisions = (stack: ResolvedStack, redis: Set<string>): Finding[] => {
   const findings: Finding[] = [];
-  const projects = Object.values(stack.projects);
+  // Projects that never touch Redis would otherwise all collide on the synthesized default.
+  const projects = Object.values(stack.projects).filter((project) => redis.has(project.key));
 
   const byNamespace = new Map<string, ResolvedProject[]>();
   for (const project of projects) {
@@ -172,13 +250,7 @@ const checkQueueConnections = (stack: ResolvedStack): Finding[] => {
       .filter((service) => {
         // A service you start by hand is a deliberate choice, not a misconfiguration.
         if (!service.autostart) return false;
-        const line =
-          service.command?.kind === 'shell'
-            ? service.command.line
-            : service.command
-              ? [service.command.file, ...service.command.args].join(' ')
-              : '';
-        return /\b(queue:work|queue:listen|horizon)\b/.test(line);
+        return /\b(queue:work|queue:listen|horizon)\b/.test(commandLine(service));
       })
       .map((service) => service.project?.key)
       .filter((key): key is string => Boolean(key)),
@@ -201,8 +273,13 @@ const checkQueueConnections = (stack: ResolvedStack): Finding[] => {
   return findings;
 };
 
-const checkPhp = async (stack: ResolvedStack): Promise<Finding[]> => {
-  const binaries = new Set(Object.values(stack.projects).map((project) => project.php));
+/** Only for projects something actually runs PHP for — a Node or Python stack needs none. */
+const checkPhp = async (stack: ResolvedStack, php: Set<string>): Promise<Finding[]> => {
+  const binaries = new Set(
+    Object.values(stack.projects)
+      .filter((project) => php.has(project.key))
+      .map((project) => project.php),
+  );
   const findings: Finding[] = [];
 
   for (const binary of binaries) {
@@ -246,8 +323,49 @@ const checkPorts = async (stack: ResolvedStack): Promise<Finding[]> => {
   return findings;
 };
 
-const checkRedisReachable = async (stack: ResolvedStack): Promise<Finding[]> => {
-  const targets = new Set(Object.values(stack.projects).map(redisTargetOf));
+/**
+ * The language-agnostic dependency check: every `external: true` service is something the
+ * stack expects to already be running, and it already declares how to test for it.
+ */
+const checkExternalServices = async (stack: ResolvedStack): Promise<Finding[]> => {
+  const external = stack.services.filter((service) => service.external && (service.ready?.tcp ?? service.ready?.http));
+
+  return Promise.all(
+    external.map(async (service): Promise<Finding> => {
+      const probe = service.ready!;
+      const label = describeProbe(probe);
+      const result = probe.http
+        ? await httpProbe(probe.http, 2_000)
+        : await tcpProbe(probe.tcp!, 2_000);
+
+      return result.ok
+        ? { level: 'ok', message: `${service.name} is reachable — ${label}` }
+        : {
+            level: 'warn',
+            message: `${service.name} is not reachable — ${label}${result.detail ? ` (${result.detail})` : ''}`,
+            hint: 'laracrew never starts an external service; anything that needs it will wait at its gate',
+          };
+    }),
+  );
+};
+
+/** Ports already covered by an external service's own gate, so they are not probed twice. */
+const externalTcpTargets = (stack: ResolvedStack): Set<string> =>
+  new Set(
+    stack.services
+      .filter((service) => service.external && service.ready?.tcp)
+      .map((service) => service.ready!.tcp!),
+  );
+
+const checkRedisReachable = async (stack: ResolvedStack, redis: Set<string>): Promise<Finding[]> => {
+  const covered = externalTcpTargets(stack);
+  const targets = new Set(
+    Object.values(stack.projects)
+      .filter((project) => redis.has(project.key))
+      .map(redisTargetOf)
+      .filter((target) => !covered.has(target)),
+  );
+
   const findings: Finding[] = [];
   for (const target of targets) {
     const result = await tcpProbe(target, 2_000);
@@ -269,14 +387,24 @@ export const runDoctor = async (stackName: string, env: NodeJS.ProcessEnv = proc
     throw error;
   }
 
+  // Classified once: every Laravel-specific check below is gated on these, so a stack with
+  // no PHP in it gets no PHP findings and a stack with no Redis gets no Redis findings.
+  const php = phpProjects(stack);
+  const redis = redisProjects(stack);
+
   const findings: Finding[] = [
     { level: 'ok', message: `stack "${stack.name}" is valid — ${stack.services.length} services` },
-    ...checkProjects(stack),
+    ...checkProjects(stack, php, redis),
     ...checkQueueConnections(stack),
-    ...checkRedisCollisions(stack),
+    ...checkRedisCollisions(stack, redis),
   ];
 
-  const async = await Promise.all([checkPhp(stack), checkPorts(stack), checkRedisReachable(stack)]);
+  const async = await Promise.all([
+    checkPhp(stack, php),
+    checkPorts(stack),
+    checkExternalServices(stack),
+    checkRedisReachable(stack, redis),
+  ]);
   return [...findings, ...async.flat()];
 };
 

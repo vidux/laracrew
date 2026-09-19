@@ -87,3 +87,6 @@ Tests spawn real children and bind real ports, so `vitest.config.ts` sets
   in the same change.
 - Prefer a fixture Laravel-ish project under `fixtures/` (fake `artisan` script that sleeps and
   logs) over requiring a real Laravel app in tests.
+- Before any release, follow the `prepare-for-publish` skill in
+  [.claude/skills/prepare-for-publish/](.claude/skills/prepare-for-publish/SKILL.md). A green test
+  suite is not a release check — it ships a tarball, so verify the tarball.

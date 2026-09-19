@@ -1,7 +1,7 @@
 {
   "name": "laracrew",
-  "version": "0.1.2",
-  "description": "Boot and supervise all the long-running processes of your Laravel projects with one command.",
+  "version": "0.2.0",
+  "description": "Boot and supervise all the long-running processes of your projects with one command. Laravel-aware, works with anything.",
   "keywords": [
     "laravel",
     "cli",

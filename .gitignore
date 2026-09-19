@@ -3,3 +3,6 @@ dist/
 *.tsbuildinfo
 .vitest/
 .tmp/
+
+# npm pack output
+*.tgz

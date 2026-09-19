@@ -90,8 +90,9 @@ they're holding before they exit, and nothing is left behind.
 
 Those run processes. laracrew knows what the processes *are*.
 
-- **It stops workers the Laravel way.** `php artisan queue:restart` first, wait for the current
-  job to finish, *then* terminate. Never a job killed mid-flight.
+- **It stops workers on their own terms.** `php artisan queue:restart` for Laravel,
+  `celery control shutdown` for Celery, any command you name — run first, wait for the process to
+  finish the job it is holding, *then* terminate. Never a job killed mid-flight.
 - **It kills whole process trees.** `php artisan serve` spawns a child PHP server; `npm run dev`
   spawns Vite. Killing the parent orphans them and the port stays bound. Every stop is a tree kill
   (`taskkill /T /F` on Windows, process-group kill on POSIX).
@@ -110,11 +111,15 @@ npm install -g laracrew
 laracrew init --examples
 ```
 
-> Not published to npm yet. Until it is, install from source:
-> `git clone https://github.com/vidux/laracrew && cd laracrew && npm install && npm run build && npm link`
+Or from source:
+
+```bash
+git clone https://github.com/vidux/laracrew && cd laracrew
+npm install && npm run build && npm link
+```
 
 Requires **Node 20+**. Works on Windows, macOS and Linux. PHP is only needed for the projects
-laracrew runs, not for laracrew itself.
+laracrew runs, not for laracrew itself — and only if those projects are PHP.
 
 ## Quick start
 
@@ -433,7 +438,7 @@ profiles:
 | `ready` | `tcp`, `http`, `logMatch` (regex over output) or `delayMs`, plus `timeoutMs` (default 30000) and `intervalMs` (default 250). Without it, "spawned" means ready. |
 | `restart` | `never` · `on-failure` (default) · `always`. |
 | `backoff` | `initialMs`, `maxMs`, `factor`, `maxRestarts`, `resetAfterMs`. Delay is `min(initialMs × factor^n, maxMs)`; the counter resets after the service stays up for `resetAfterMs`. |
-| `stop` | `artisan` (a graceful command such as `queue:restart` or `horizon:terminate`), `signal`, `graceMs`. |
+| `stop` | `exec` (any graceful shutdown command), `artisan` (sugar for one that runs artisan, such as `queue:restart` or `horizon:terminate`), `signal`, `graceMs`. |
 | `url` | Recorded for the service; `laracrew open` is not built yet. |
 | `external` | Health-checked but never spawned — Redis, MySQL, a Docker service. |
 | `autostart` | `false` defines the service without launching it. It shows as **idle** in the tree; select it and press `s` when you need it. |
@@ -500,6 +505,24 @@ laracrew up dual --json | jq 'select(.type=="service:exit")'
 
 Exit code is 1 when anything is at `✖`, so it drops straight into a pre-flight script.
 
+**Every Laravel-specific check is skipped on a stack that isn't Laravel.** `doctor` works out
+which projects actually run PHP — from the commands they declare and from `stop.artisan` — and
+only those get the `php --version` check and the "no `artisan` file" warning. The same goes for
+Redis: a project is only checked for namespace collisions and reachability if its `.env` or its
+commands say it talks to Redis. Run `doctor` on a Django or Node stack and you get the checks
+that apply to it, not a wall of PHP complaints:
+
+```
+✔ stack "django-celery" is valid — 8 services
+✔ port 8000 is free
+✔ postgres is reachable — tcp 127.0.0.1:5432
+▲ redis is not reachable — tcp 127.0.0.1:6379 (ECONNREFUSED)
+  laracrew never starts an external service; anything that needs it will wait at its gate
+```
+
+Services marked `external: true` are checked through the gate they already declare, so whatever
+your stack depends on — Postgres, RabbitMQ, an HTTP service — gets verified before boot.
+
 ---
 
 ## How shutdown works
@@ -507,9 +530,8 @@ Exit code is 1 when anything is at `✖`, so it drops straight into a pre-flight
 This is where most process managers leave a mess, so it's worth stating exactly. Each step runs
 only if the previous one timed out:
 
-1. **Laravel graceful** — if the service declares `stop.artisan`, run it (`php artisan
-   queue:restart`, `horizon:terminate`) and wait up to `graceMs` for the worker to exit on its own,
-   having finished the job it was holding.
+1. **Graceful** — if the service declares `stop.exec`, run it and wait up to `graceMs` for the
+   process to exit on its own, having finished whatever it was holding.
 2. **Signal** — `SIGTERM` to the process group. Skipped on Windows, which has no equivalent.
 3. **Tree kill** — `taskkill /pid <pid> /T /F` on Windows, `kill(-pid)` on POSIX. This is what
    catches the child PHP server behind `artisan serve` and the Vite process behind `npm run dev`.
@@ -517,6 +539,19 @@ only if the previous one timed out:
 
 Stacks come down in reverse dependency order, parallel within a level. A second Ctrl-C escalates
 immediately and says so.
+
+Step 1 is any command, so every worker gets the same treatment your queue workers do:
+
+```yaml
+stop: { exec: ["celery", "-A", "app", "control", "shutdown"], graceMs: 20000 }
+stop: { exec: "npm run drain", graceMs: 5000 }
+stop: { exec: ["docker", "compose", "stop"], graceMs: 30000 }
+stop: { artisan: "queue:restart", graceMs: 15000 }   # shorthand for `<php> artisan queue:restart`
+```
+
+`artisan` is the Laravel shorthand: it runs through the project's PHP binary, from the project
+root, even when the service sets its own `cwd`. It needs a `project`; anything else uses `exec`.
+Without either, the ladder starts at the signal.
 
 If a readiness gate fails during boot, laracrew rolls back everything it already started before
 exiting non-zero — you never get a half-booted stack you have to clean up by hand.
@@ -540,12 +575,15 @@ project, `LARACREW_PROJECT=<key>`.
 
 ## Status
 
-**v0.1.0 — supervisor and full-screen view are built and tested.**
+**v0.2.0 — supervisor and full-screen view are built and tested.**
 
 Working now: config pipeline, dependency-ordered boot with readiness gates, restart policies with
-exponential backoff, the Laravel-aware stop ladder, the full-screen process tree with per-process
-log inspection, logs persisted to disk with `laracrew logs` to read them back, plain and JSON
-renderers, per-stack global commands (`link` / `unlink`), `doctor`, `init`, `ls`.
+exponential backoff, the graceful stop ladder — `stop.exec` for any process, `stop.artisan` as the
+Laravel shorthand — the full-screen process tree with per-process log inspection, logs persisted to
+disk with `laracrew logs` to read them back, plain and JSON renderers, per-stack global commands
+(`link` / `unlink`), `doctor`, `init`, `ls`.
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
 Accepted by the config schema but **not yet acted on** — they validate, so your stack files are
 future-proof, but nothing happens yet:
@@ -577,7 +615,7 @@ The full plan lives in [.claude/PLAN.md](.claude/PLAN.md), with the design in
 npm install
 npm run dev -- up example     # tsx, no build step
 npm run build                 # tsup -> dist/index.js
-npm test                      # vitest, 226 tests
+npm test                      # vitest, 244 tests
 npm run typecheck
 npm link                      # put `laracrew` on PATH while hacking on it
 ```

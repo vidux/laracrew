@@ -38,9 +38,18 @@ export const backoffSchema = z
   .strict();
 export type Backoff = z.infer<typeof backoffSchema>;
 
+/** `cmd` accepts a shell line or an argv array. The array form skips shell parsing. */
+export const commandSchema = z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]);
+
 export const stopPolicySchema = z
   .object({
-    /** Laravel-native graceful shutdown, e.g. "queue:restart" or "horizon:terminate". */
+    /**
+     * Step 1 of the stop ladder: any command that asks the process to finish what it is
+     * holding and exit by itself — `celery control shutdown`, `docker compose stop`, a
+     * drain script. Runs in the service's cwd; laracrew waits `graceMs` for the exit.
+     */
+    exec: commandSchema.optional(),
+    /** Sugar for `exec` on a Laravel project: runs `<php> artisan <this>` from its root. */
     artisan: z.string().optional(),
     signal: z.string().default('SIGTERM'),
     graceMs: z.number().int().positive().default(10_000),
@@ -67,9 +76,6 @@ export const metricsSchema = z
   })
   .strict();
 export type MetricsConfig = z.infer<typeof metricsSchema>;
-
-/** `cmd` accepts a shell line or an argv array. The array form skips shell parsing. */
-export const commandSchema = z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]);
 
 export const serviceSchema = z
   .object({

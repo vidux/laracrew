@@ -64,8 +64,11 @@ services:
     cmd: ["npm", "run", "worker"] # BullMQ / Bee-Queue consumer
     groups: [backend, workers]
     needs: [redis, types:build]
-    # Give an in-flight job a moment to settle before the process is taken down.
-    stop: { graceMs: 10000 }
+    # Same deal as a Laravel queue worker: ask it to drain, give it 10s, then escalate.
+    # The script closes the BullMQ worker and exits once the current job is acked.
+    stop:
+      exec: ["npm", "run", "worker:drain"]
+      graceMs: 10000
 
   - name: web
     project: web

@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 /**
- * Stands in for a Laravel process in the test suite. It can log on an interval, exit with a
- * chosen code, hang, or spawn a child of its own so the stop ladder has a real tree to kill.
+ * Stands in for a long-running process in the test suite. It can log on an interval, exit
+ * with a chosen code, hang, spawn a child of its own so the stop ladder has a real tree to
+ * kill, or shut itself down when a graceful stop command signals it through a file.
  *
  *   node fixtures/fake-artisan.mjs --name worker --interval 50
  *   node fixtures/fake-artisan.mjs --exit 1 --after 100
  *   node fixtures/fake-artisan.mjs --ready "listening on 9999" --after 200
  *   node fixtures/fake-artisan.mjs --spawn-child --ignore-sigterm
+ *   node fixtures/fake-artisan.mjs --exit-on-file /tmp/drain.flag
  */
 import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
@@ -21,6 +23,7 @@ const { values } = parseArgs({
     'ignore-sigterm': { type: 'boolean', default: false },
     'spawn-child': { type: 'boolean', default: false },
     'listen-port': { type: 'string' },
+    'exit-on-file': { type: 'string' },
     stderr: { type: 'boolean', default: false },
   },
   strict: true,
@@ -48,6 +51,18 @@ if (values['listen-port']) {
   createServer().listen(Number(values['listen-port']), '127.0.0.1', () => {
     console.log(`${name}: listening on ${values['listen-port']}`);
   });
+}
+
+// How a real worker reacts to a graceful stop: it notices the flag the stop command set,
+// finishes the tick it is on, and exits by itself — no signal involved.
+if (values['exit-on-file']) {
+  const { existsSync } = await import('node:fs');
+  const watcher = setInterval(() => {
+    if (!existsSync(values['exit-on-file'])) return;
+    clearInterval(watcher);
+    console.log(`${name}: graceful stop, exiting`);
+    process.exit(0);
+  }, 25);
 }
 
 let tick = 0;
