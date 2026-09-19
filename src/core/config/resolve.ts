@@ -30,10 +30,18 @@ export interface ResolvedProject {
   color: string;
 }
 
+/** Step 1 of the stop ladder, already resolved to something runnable. */
+export interface GracefulStop {
+  command: Command;
+  cwd: string;
+}
+
 export interface ResolvedService {
   name: string;
   project?: ResolvedProject;
   command?: Command;
+  /** From `stop.exec`, or from `stop.artisan` on a project. Absent = go straight to the signal. */
+  graceful?: GracefulStop;
   cwd: string;
   env: Record<string, string>;
   groups: string[];
@@ -165,10 +173,41 @@ const mergeService = (
     ? path.resolve(project?.path ?? stack.dir, service.cwd)
     : (project?.path ?? stack.dir);
 
+  // A service declaring its own graceful step replaces the inherited one, whichever kind it is.
+  const inheritedStop = { ...defaults.stop };
+  const ownStop = service.stop ?? {};
+  if (ownStop.exec !== undefined) delete inheritedStop.artisan;
+  if (ownStop.artisan !== undefined) delete inheritedStop.exec;
+  const stop = stopPolicySchema.parse({ ...inheritedStop, ...ownStop });
+
+  if (stop.exec !== undefined && stop.artisan !== undefined) {
+    throw new ConfigError(
+      `service "${service.name}" declares both \`stop.exec\` and \`stop.artisan\``,
+      { file: stack.file, details: ['keep one — `artisan` is only shorthand for an `exec` that runs artisan'] },
+    );
+  }
+  if (stop.artisan !== undefined && !project) {
+    throw new ConfigError(
+      `service "${service.name}" declares \`stop.artisan\` but belongs to no project`,
+      {
+        file: stack.file,
+        details: ['`artisan` runs `<project php> artisan ...`, so it needs a project', 'for any other command use `stop.exec`'],
+      },
+    );
+  }
+
+  const graceful: GracefulStop | undefined = stop.exec
+    ? { command: toCommand(stop.exec), cwd }
+    : stop.artisan && project
+      ? // artisan must run from the Laravel root even when the service sets its own cwd.
+        { command: { kind: 'argv', file: project.php, args: ['artisan', ...stop.artisan.split(/\s+/)] }, cwd: project.path }
+      : undefined;
+
   return {
     name: service.name,
     ...(project ? { project } : {}),
     ...(service.cmd ? { command: toCommand(service.cmd) } : {}),
+    ...(graceful ? { graceful } : {}),
     cwd,
     env: { ...service.env },
     groups: service.groups,
@@ -176,7 +215,7 @@ const mergeService = (
     ...(service.ready ? { ready: service.ready } : {}),
     restart: service.restart ?? defaults.restart,
     backoff: backoffSchema.parse({ ...defaults.backoff, ...(service.backoff ?? {}) }),
-    stop: stopPolicySchema.parse({ ...defaults.stop, ...(service.stop ?? {}) }),
+    stop,
     ...(service.watch ? { watch: service.watch } : {}),
     ...(service.metrics ? { metrics: service.metrics } : {}),
     ...(service.url ? { url: service.url } : {}),

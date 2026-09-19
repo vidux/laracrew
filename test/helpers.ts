@@ -57,6 +57,17 @@ export class TempHome {
     return dir;
   }
 
+  /** A project root with no artisan, no composer.json and no .env — a Node or Python app. */
+  makePlainProject(key: string, env?: Record<string, string>): string {
+    const dir = path.join(this.root, 'projects', key);
+    mkdirSync(dir, { recursive: true });
+    if (env) {
+      const lines = Object.entries(env).map(([name, value]) => `${name}=${value}`);
+      writeFileSync(path.join(dir, '.env'), `${lines.join('\n')}\n`, 'utf8');
+    }
+    return dir;
+  }
+
   cleanup(): void {
     rmSync(this.root, { recursive: true, force: true });
   }

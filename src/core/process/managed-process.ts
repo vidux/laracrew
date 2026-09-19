@@ -275,16 +275,18 @@ export class ManagedProcess {
     this.#backoffTimer.unref?.();
   }
 
-  /** The Laravel-native graceful shutdown, when the service declares one. */
+  /**
+   * Step 1 of the stop ladder: ask the process to finish what it is holding and exit by
+   * itself. What that command is — `queue:restart`, `celery control shutdown`, a drain
+   * script — was decided in `resolve.ts`; this only runs it.
+   */
   #graceful(): (() => Promise<void>) | undefined {
-    const artisan = this.service.stop.artisan;
-    const project = this.service.project;
-    if (!artisan || !project) return undefined;
+    const graceful = this.service.graceful;
+    if (!graceful) return undefined;
 
     return async () => {
-      const command = { kind: 'argv' as const, file: project.php, args: ['artisan', ...artisan.split(/\s+/)] };
-      this.#log(`stop: ${describeCommand(command)}`);
-      await runOnce(command, { cwd: project.path, env: this.#env, timeoutMs: 15_000 });
+      this.#log(`stop: ${describeCommand(graceful.command)}`);
+      await runOnce(graceful.command, { cwd: graceful.cwd, env: this.#env, timeoutMs: 15_000 });
     };
   }
 

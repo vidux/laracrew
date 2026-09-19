@@ -61,6 +61,11 @@ services:
     env:
       PYTHONUNBUFFERED: "1"
     ready: { logMatch: "ready\\.$|celery@.* ready", timeoutMs: 30000 }
+    # The Celery equivalent of `artisan queue:restart`: ask the worker to finish the task it
+    # holds and exit by itself. Only if it is still there after 25s does laracrew signal it.
+    stop:
+      exec: [".venv/bin/celery", "-A", "bookstore", "control", "shutdown"]
+      graceMs: 25000
 
   - name: celery:beat
     project: app

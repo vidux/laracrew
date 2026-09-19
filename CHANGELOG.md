@@ -17,6 +17,82 @@ Planned, in order — see `.claude/PLAN.md`:
 - `laracrew run <task>` for one-shot cross-project sequences
 - Background daemon: `up --detach`, `attach`, `status`, `logs -f`
 
+## [0.2.0] — 2026-09-20
+
+Graceful shutdown for any process, not only Laravel queue workers, and a `doctor` that only
+applies its Laravel checks to Laravel.
+
+laracrew has always been able to *run* anything — the supervisor takes a command and knows
+nothing about the language behind it. But the two things that made it more than a process
+runner, the graceful stop and the pre-flight checks, both assumed PHP. This release closes that
+gap. Existing stack files keep working unchanged.
+
+### Added
+
+- **`stop.exec`** — any command as the first step of the stop ladder. It runs in the service's
+  `cwd`, with the service's environment, and laracrew waits `graceMs` for the process to exit by
+  itself before escalating to the signal and the tree kill. A Celery worker, a BullMQ consumer or
+  a Compose project now shuts down as carefully as a queue worker:
+
+  ```yaml
+  stop: { exec: ["celery", "-A", "app", "control", "shutdown"], graceMs: 25000 }
+  stop: { exec: "npm run drain", graceMs: 10000 }
+  stop: { exec: ["docker", "compose", "stop"], graceMs: 30000 }
+  ```
+
+- **`doctor` checks external dependencies.** Every `external: true` service is probed through the
+  `tcp` or `http` gate it already declares, so a stack's Postgres, RabbitMQ or HTTP dependency is
+  verified before boot — whatever the stack is written in.
+- `doctor` reads `REDIS_URL` when a project sets it instead of `REDIS_HOST` / `REDIS_PORT`.
+
+### Changed
+
+- **`stop.artisan` is now shorthand for `stop.exec`.** It resolves to `<project php> artisan
+  <command>`, run from the project root even when the service sets its own `cwd`. Behaviour for
+  existing Laravel stacks is unchanged; a service may declare one or the other, not both. A
+  service that declares its own graceful step now replaces an inherited one in either direction,
+  so a stack can default to `artisan: queue:restart` and still give one service its own `exec`.
+- **`doctor` applies each check only where it means something.** It works out which projects run
+  PHP (from their commands and from `stop.artisan`) and which talk to Redis (from their `.env`
+  and their commands). A stack with no PHP in it gets no PHP findings; a stack with no Redis gets
+  no Redis findings. Laravel stacks see exactly what they saw before.
+- A Redis address already covered by an `external: true` service's gate is no longer probed a
+  second time from the project's `.env`.
+- `laracrew --help` and the generated `projects.yaml` no longer describe projects as Laravel-only.
+  `php:` is documented as what it is: the binary the `stop.artisan` shorthand runs.
+
+### Fixed
+
+- **`laracrew --version` reported `0.1.0` on every release.** The version was a hardcoded
+  constant that nobody bumped, so `0.1.1` and `0.1.2` both identified themselves as `0.1.0`. It is
+  now baked in from `package.json` at build time, with a test that fails if the two ever disagree.
+- **`stop.artisan` on a service with no project was silently ignored** — the graceful step was
+  skipped and nothing said so. It is now a config error that names `stop.exec` as the way out.
+- **`doctor` failed on a machine without PHP** for a stack that contains no PHP: `php --version`
+  ran for every declared project and a missing binary was a blocking `✖` with exit code 1.
+- **False Redis collision between projects that never touch Redis.** Two projects with no `.env`
+  both resolved to the same synthesized default namespace and were reported as sharing it.
+- The "no `artisan` file" and "`.env` is missing or empty" warnings no longer fire for projects
+  that are not PHP projects.
+
+### Notes
+
+- 244 tests. The graceful stop step had no coverage before this release; it now has unit tests
+  for both outcomes (the process exits by itself, and the ladder escalating when it does not),
+  plus tests for every new config error.
+- The npm description and `laracrew --help` now say "your projects" rather than "your Laravel
+  projects". The README still leads with the Laravel story, which is what the tool was built for.
+
+## [0.1.2] — 2026-09-20
+
+### Added
+
+- `repository`, `homepage` and `bugs` metadata, so the npm page links back to the source.
+
+## [0.1.1] — 2026-09-20
+
+First release published to npm. No code changes from `0.1.0`.
+
 ## [0.1.0] — 2026-09-19
 
 First release. Boots and supervises the long-running processes of several Laravel projects at
@@ -90,5 +166,8 @@ once, from one command.
 - Accepted by the schema but not yet acted on: `watch`, `metrics` (read by `doctor` only), and
   `hooks`. Stack files written today stay valid.
 
-[Unreleased]: https://github.com/OWNER/laracrew/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/OWNER/laracrew/releases/tag/v0.1.0
+[Unreleased]: https://github.com/vidux/laracrew/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/vidux/laracrew/compare/v0.1.2...v0.2.0
+[0.1.2]: https://github.com/vidux/laracrew/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/vidux/laracrew/releases/tag/v0.1.1
+[0.1.0]: https://github.com/vidux/laracrew/releases/tag/v0.1.0

@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import net from 'node:net';
+import path from 'node:path';
 import { Supervisor } from '../src/core/process/supervisor.js';
 import { prepareStack } from '../src/cli/commands/up.js';
 import { isAlive } from '../src/core/process/stop.js';
-import { EventRecorder, FAKE_ARTISAN, NODE, TempHome, newBus, waitUntil } from './helpers.js';
+import { EventRecorder, FAKE_ARTISAN, NODE, TempHome, newBus, waitUntil, yamlPath } from './helpers.js';
 
 let home: TempHome;
 let supervisor: Supervisor | undefined;
@@ -280,6 +281,53 @@ services:
       await waitUntil(() => !isAlive(pid), { label: `pid ${pid} to exit` });
     }
     expect(recorder.ofType('stack:stopped')).toHaveLength(1);
+  });
+
+  test('stop.exec drains the process before any signal is sent', async () => {
+    const flag = yamlPath(path.join(home.root, 'drain.flag'));
+    const { supervisor: sup, recorder } = await start(`
+name: t
+defaults: { restart: never }
+services:
+  - name: worker
+    cmd: ${fake(['--name', 'worker', '--interval', '25', '--exit-on-file', flag])}
+    cwd: "${yamlPath(home.root)}"
+    stop:
+      exec: ["${NODE}", "-e", "require('fs').writeFileSync(process.argv[1], '')", "${flag}"]
+      graceMs: 5000
+`);
+
+    const pid = recorder.ofType('service:spawned')[0]!.pid;
+    await sup.down('test');
+
+    const lines = recorder.linesOf('worker');
+    // The worker exited by itself, so the ladder never escalated.
+    expect(lines.some((line) => line.includes('graceful stop, exiting'))).toBe(true);
+    expect(lines).toContain('stop: graceful');
+    expect(lines.some((line) => line === 'stop: signal' || line === 'stop: tree-kill')).toBe(false);
+    await waitUntil(() => !isAlive(pid), { label: `pid ${pid} to exit` });
+  });
+
+  test('falls through to the signal when the graceful command does not land in time', async () => {
+    const { supervisor: sup, recorder } = await start(`
+name: t
+defaults: { restart: never }
+services:
+  - name: stubborn
+    cmd: ${fake(['--name', 'stubborn', '--interval', '25'])}
+    cwd: "${yamlPath(home.root)}"
+    stop:
+      exec: ["${NODE}", "-e", "0"]
+      graceMs: 300
+`);
+
+    const pid = recorder.ofType('service:spawned')[0]!.pid;
+    await sup.down('test');
+
+    const lines = recorder.linesOf('stubborn');
+    expect(lines).toContain('stop: graceful');
+    expect(lines.some((line) => line === 'stop: signal' || line === 'stop: tree-kill')).toBe(true);
+    await waitUntil(() => !isAlive(pid), { label: `pid ${pid} to exit` });
   });
 
   test('stops in reverse dependency order', async () => {

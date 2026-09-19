@@ -44,8 +44,10 @@ services:
     groups: [infra]
     # Ready when every port we depend on is actually accepting connections.
     ready: { tcp: "127.0.0.1:5432", timeoutMs: 120000, intervalMs: 1000 }
-    # Compose needs time to stop its own containers cleanly.
-    stop: { graceMs: 30000 }
+    # Let Compose stop its own containers the way it wants to, before anything is killed.
+    stop:
+      exec: ["docker", "compose", "stop"]
+      graceMs: 30000
 
   - name: kafka-wait
     external: true # nothing to start; this row exists purely as a gate

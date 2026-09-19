@@ -76,4 +76,10 @@ here, it stops when the rest of the stack stops.
 mis-split on a path containing spaces the way a shell string can.
 
 **A gate with nothing to start is fine.** An `external: true` service is just a health check, so
-it can stand in as a named wait step — see `kafka-wait` in the microservices example.
+it can stand in as a named wait step — see `kafka-wait` in the microservices example. `laracrew
+doctor` probes those gates before boot, so declaring your Postgres and Redis this way is also how
+you get them checked.
+
+**The Laravel checks only apply to Laravel.** `doctor` works out which projects actually run PHP
+and which actually talk to Redis, from the commands they declare and the `.env` they read. A
+Django or Node stack gets the port and dependency checks and none of the PHP ones.

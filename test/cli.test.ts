@@ -5,7 +5,8 @@ import path from 'node:path';
 import { runInit } from '../src/cli/commands/init.js';
 import { declaredPorts, runDoctor } from '../src/cli/commands/doctor.js';
 import { prepareStack } from '../src/cli/commands/up.js';
-import { resolveStackName } from '../src/cli/program.js';
+import { fileURLToPath } from 'node:url';
+import { VERSION, resolveStackName } from '../src/cli/program.js';
 import { attachPlainRenderer } from '../src/cli/render/plain.js';
 import { createPainter, stripAnsi, supportsColor } from '../src/cli/render/colors.js';
 import { EventEmitter } from 'node:events';
@@ -222,6 +223,164 @@ services:
 `,
     );
     expect(declaredPorts(prepareStack('p', { env: home.env }))).toEqual([8000, 9100]);
+  });
+});
+
+describe('version', () => {
+  test('matches package.json — a hardcoded copy drifts and ships wrong', () => {
+    const pkg = JSON.parse(
+      readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'),
+    ) as { version: string };
+
+    expect(VERSION).toBe(pkg.version);
+  });
+});
+
+describe('doctor on stacks that are not Laravel', () => {
+  /** A binary that cannot exist, so a stray PHP check shows up as a hard error. */
+  const NO_PHP = 'php-not-installed-anywhere';
+
+  test('never runs php for a stack that has none', async () => {
+    const app = home.makePlainProject('app');
+    home.writeStack(
+      'py',
+      `
+name: py
+projects:
+  app: { path: "${yamlPath(app)}", php: "${NO_PHP}" }
+services:
+  - { name: web, project: app, cmd: ["python", "-u", "manage.py", "runserver"] }
+  - { name: worker, project: app, cmd: ["celery", "-A", "app", "worker"] }
+`,
+    );
+
+    const findings = await runDoctor('py', home.env);
+
+    expect(findings.some((finding) => finding.message.includes(NO_PHP))).toBe(false);
+    expect(findings.filter((finding) => finding.level === 'error')).toEqual([]);
+  });
+
+  test('a project that only runs php through stop.artisan still gets the php check', async () => {
+    const app = home.makePlainProject('app');
+    home.writeStack(
+      'hybrid',
+      `
+name: hybrid
+projects:
+  app: { path: "${yamlPath(app)}", php: "${NO_PHP}" }
+services:
+  - name: worker
+    project: app
+    cmd: ["node", "worker.js"]
+    stop: { artisan: "queue:restart" }
+`,
+    );
+
+    const findings = await runDoctor('hybrid', home.env);
+    expect(findings.some((finding) => finding.message.includes(`cannot run "${NO_PHP}"`))).toBe(true);
+  });
+
+  test('no artisan warning for a project nothing runs php for', async () => {
+    const app = home.makePlainProject('app');
+    home.writeStack(
+      'node',
+      `
+name: node
+projects:
+  app: { path: "${yamlPath(app)}" }
+services:
+  - { name: api, project: app, cmd: ["node", "server.js"] }
+`,
+    );
+
+    const findings = await runDoctor('node', home.env);
+    expect(findings.some((finding) => /artisan/.test(finding.message))).toBe(false);
+    expect(findings.some((finding) => /is missing or empty/.test(finding.message))).toBe(false);
+  });
+
+  test('two projects that never touch Redis do not collide on the default namespace', async () => {
+    const api = home.makePlainProject('api');
+    const web = home.makePlainProject('web');
+    home.writeStack(
+      'pair',
+      `
+name: pair
+projects:
+  api: { path: "${yamlPath(api)}" }
+  web: { path: "${yamlPath(web)}" }
+services:
+  - { name: api:serve, project: api, cmd: ["node", "api.js"] }
+  - { name: web:serve, project: web, cmd: ["node", "web.js"] }
+`,
+    );
+
+    const findings = await runDoctor('pair', home.env);
+    expect(findings.some((finding) => /share Redis/.test(finding.message))).toBe(false);
+    expect(findings.some((finding) => /redis .*reachable/.test(finding.message))).toBe(false);
+  });
+
+  test('external dependencies are probed through their own declared gate', async () => {
+    const server = net.createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as net.AddressInfo).port;
+
+    try {
+      home.writeStack(
+        'deps',
+        `
+name: deps
+services:
+  - { name: postgres, external: true, ready: { tcp: "127.0.0.1:${port}" } }
+  - { name: rabbit, external: true, ready: { tcp: "127.0.0.1:1" } }
+  - { name: api, cmd: ["node", "api.js"], cwd: "${yamlPath(home.root)}" }
+`,
+      );
+
+      const findings = await runDoctor('deps', home.env);
+      const up = findings.find((finding) => finding.message.startsWith('postgres is reachable'));
+      const down = findings.find((finding) => finding.message.startsWith('rabbit is not reachable'));
+
+      expect(up?.level).toBe('ok');
+      expect(down?.level).toBe('warn');
+      expect(down?.hint).toMatch(/never starts an external service/);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  test('a redis external service is not probed twice', async () => {
+    const api = home.makeProject('api', { QUEUE_CONNECTION: 'redis', REDIS_HOST: '127.0.0.1', REDIS_PORT: '6379' });
+    home.write('projects.yaml', `projects:\n  api: { path: "${yamlPath(api)}" }\n`);
+    home.writeStack(
+      'once',
+      `
+name: once
+use: [api]
+services:
+  - { name: redis, external: true, ready: { tcp: "127.0.0.1:6379" } }
+  - { name: api:queue, project: api, cmd: "php artisan queue:work" }
+`,
+    );
+
+    const findings = await runDoctor('once', home.env);
+    expect(findings.filter((finding) => /127\.0\.0\.1:6379/.test(finding.message))).toHaveLength(1);
+  });
+
+  test('REDIS_URL supplies the host and port when REDIS_HOST does not', async () => {
+    const app = home.makePlainProject('app', { REDIS_URL: 'redis://127.0.0.1:6399/2' });
+    home.writeStack(
+      'url',
+      `
+name: url
+projects:
+  app: { path: "${yamlPath(app)}" }
+services:
+  - { name: worker, project: app, cmd: ["celery", "-A", "app", "worker"] }
+`,
+    );
+
+    const findings = await runDoctor('url', home.env);
+    expect(findings.some((finding) => /redis not reachable at 127\.0\.0\.1:6399/.test(finding.message))).toBe(true);
   });
 });
 

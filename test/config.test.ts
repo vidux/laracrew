@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { mkdirSync } from 'node:fs';
+import path from 'node:path';
 import { interpolate, interpolateDeep } from '../src/core/config/interpolate.js';
 import { ConfigError, didYouMean } from '../src/core/config/errors.js';
 import { loadStack, loadSharedProjects, listStacks } from '../src/core/config/load.js';
@@ -265,6 +267,146 @@ profiles:
       'name: dual\nservices:\n  - { name: a, cmd: "node -e 0" }\n  - { name: a, cmd: "node -e 1" }\n',
     );
     expect(() => resolve()).toThrow(/both named "a"/);
+  });
+});
+
+describe('graceful stop', () => {
+  const resolveStackNamed = (name: string) =>
+    resolveStack(loadStack(name, home.env), { sharedProjects: loadSharedProjects(home.env), env: home.env });
+
+  const gracefulOf = (name: string, service: string) =>
+    resolveStackNamed(name).services.find((candidate) => candidate.name === service)?.graceful;
+
+  test('stop.exec resolves for a service with no project at all', () => {
+    home.writeStack(
+      's',
+      `
+name: s
+services:
+  - name: worker
+    cmd: ["celery", "-A", "app", "worker"]
+    stop: { exec: ["celery", "-A", "app", "control", "shutdown"] }
+`,
+    );
+
+    expect(gracefulOf('s', 'worker')?.command).toEqual({
+      kind: 'argv',
+      file: 'celery',
+      args: ['-A', 'app', 'control', 'shutdown'],
+    });
+  });
+
+  test('a shell string works too, and runs in the service cwd', () => {
+    const app = home.makePlainProject('app');
+    home.writeStack(
+      's',
+      `
+name: s
+projects:
+  app: { path: "${yamlPath(app)}" }
+services:
+  - { name: api, project: app, cmd: "node server.js", stop: { exec: "npm run drain" } }
+`,
+    );
+
+    const graceful = gracefulOf('s', 'api');
+    expect(graceful?.command).toEqual({ kind: 'shell', line: 'npm run drain' });
+    expect(graceful?.cwd).toBe(app);
+  });
+
+  test('stop.artisan is sugar for running artisan through the project php', () => {
+    const api = home.makeProject('api');
+    home.writeStack(
+      's',
+      `
+name: s
+projects:
+  api: { path: "${yamlPath(api)}", php: "php8.3" }
+services:
+  - { name: queue, project: api, cmd: "php artisan queue:work", stop: { artisan: "queue:restart" } }
+`,
+    );
+
+    expect(gracefulOf('s', 'queue')).toEqual({
+      command: { kind: 'argv', file: 'php8.3', args: ['artisan', 'queue:restart'] },
+      cwd: api,
+    });
+  });
+
+  test('artisan runs from the project root even when the service sets its own cwd', () => {
+    const api = home.makeProject('api');
+    mkdirSync(path.join(api, 'sub'), { recursive: true });
+    home.writeStack(
+      's',
+      `
+name: s
+projects:
+  api: { path: "${yamlPath(api)}" }
+services:
+  - { name: queue, project: api, cwd: sub, cmd: "php artisan queue:work", stop: { artisan: "queue:restart" } }
+`,
+    );
+
+    expect(gracefulOf('s', 'queue')?.cwd).toBe(api);
+  });
+
+  test('a service inheriting stop.artisan from defaults can replace it with its own exec', () => {
+    const api = home.makeProject('api');
+    home.writeStack(
+      's',
+      `
+name: s
+projects:
+  api: { path: "${yamlPath(api)}" }
+defaults:
+  stop: { artisan: "queue:restart" }
+services:
+  - { name: queue, project: api, cmd: "php artisan queue:work" }
+  - { name: node, project: api, cmd: "node worker.js", stop: { exec: "node drain.js" } }
+`,
+    );
+
+    expect(gracefulOf('s', 'queue')?.command).toMatchObject({ args: ['artisan', 'queue:restart'] });
+    expect(gracefulOf('s', 'node')?.command).toEqual({ kind: 'shell', line: 'node drain.js' });
+  });
+
+  test('stop.artisan without a project names the fix instead of doing nothing', () => {
+    home.writeStack(
+      's',
+      'name: s\nservices:\n  - { name: a, cmd: "node -e 0", stop: { artisan: "queue:restart" } }\n',
+    );
+
+    expect(() => resolveStackNamed('s')).toThrow(/belongs to no project/);
+
+    // The way out has to be in the message the user actually sees, not just in the summary.
+    let printed = '';
+    try {
+      resolveStackNamed('s');
+    } catch (error) {
+      printed = (error as ConfigError).format();
+    }
+    expect(printed).toMatch(/stop\.exec/);
+  });
+
+  test('declaring both exec and artisan on one service is an error', () => {
+    const api = home.makeProject('api');
+    home.writeStack(
+      's',
+      `
+name: s
+projects:
+  api: { path: "${yamlPath(api)}" }
+services:
+  - { name: a, project: api, cmd: "node -e 0", stop: { exec: "node drain.js", artisan: "queue:restart" } }
+`,
+    );
+
+    expect(() => resolveStackNamed('s')).toThrow(/both `stop.exec` and `stop.artisan`/);
+  });
+
+  test('no graceful step at all means the ladder starts at the signal', () => {
+    home.writeStack('s', 'name: s\nservices:\n  - { name: a, cmd: "node -e 0" }\n');
+    expect(gracefulOf('s', 'a')).toBeUndefined();
   });
 });
 

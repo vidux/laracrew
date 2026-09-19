@@ -15,8 +15,11 @@ metricsIntervalMs: 2000
 # defaultStack: dual
 `;
 
-export const PROJECTS_YAML = `# Your Laravel projects, referenced by key from any stack.
+export const PROJECTS_YAML = `# Your projects, referenced by key from any stack. A project is just a root directory
+# plus the defaults its services inherit — cwd, .env and colour. Any language.
 # Paths may use forward slashes on Windows.
+#
+# Declaring projects here is optional: a service can carry its own \`cwd\` instead.
 projects: {}
 
 # Example — delete the \`{}\` above and uncomment:
@@ -24,12 +27,11 @@ projects: {}
 # projects:
 #   api:
 #     path: D:/work/api
-#     php: php            # or an absolute path to a specific PHP build
-#     envFile: .env       # read for QUEUE_CONNECTION, REDIS_*, APP_URL, DB_*
+#     php: php            # only used by \`stop: { artisan: ... }\`; ignore it for non-PHP projects
+#     envFile: .env       # read for \${project.env:KEY} tokens, and by \`doctor\`
 #     color: cyan
-#   portal:
-#     path: D:/work/portal
-#     php: php
+#   web:
+#     path: D:/work/web
 #     envFile: .env
 #     color: magenta
 `;
