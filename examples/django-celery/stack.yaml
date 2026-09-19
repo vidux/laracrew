@@ -1,0 +1,94 @@
+# Django with Celery: web server, worker, beat scheduler, and the optional extras.
+#
+# Demonstrates: reading values out of the project's own .env with ${project.env:...},
+#               a virtualenv interpreter, autostart:false for tools you open occasionally,
+#               and a worker whose graceful stop is a signal rather than an artisan command.
+#
+# Setup: edit the path and the interpreter, then
+#   cp -r django-celery ~/.laracrew/stacks/
+#   laracrew up django-celery
+name: django-celery
+description: Django + Celery worker + beat
+command: django
+
+projects:
+  app:
+    path: ~/code/bookstore
+    envFile: .env # DJANGO_SETTINGS_MODULE, REDIS_URL, DB_*
+    color: green
+
+defaults:
+  restart: on-failure
+  backoff: { initialMs: 1000, maxMs: 20000, factor: 2, maxRestarts: 10 }
+  # Celery handles SIGTERM properly: it stops accepting work and drains what it holds.
+  stop: { signal: SIGTERM, graceMs: 20000 }
+
+services:
+  - name: redis
+    external: true
+    ready: { tcp: "127.0.0.1:6379", timeoutMs: 10000 }
+
+  - name: postgres
+    external: true
+    ready: { tcp: "127.0.0.1:5432", timeoutMs: 10000 }
+
+  # Migrations run to completion before anything that touches the database starts.
+  - name: migrate
+    project: app
+    cmd: [".venv/bin/python", "manage.py", "migrate", "--noinput"]
+    groups: [setup]
+    needs: [postgres]
+    restart: never
+    ready: { logMatch: "No migrations to apply|Applying|OK", timeoutMs: 120000 }
+
+  - name: web
+    project: app
+    cmd: [".venv/bin/python", "manage.py", "runserver", "0.0.0.0:${port:8000}"]
+    groups: [http]
+    needs: [postgres, redis, migrate]
+    env:
+      PYTHONUNBUFFERED: "1" # without this, output is buffered and the log pane stays empty
+      DJANGO_SETTINGS_MODULE: bookstore.settings.local
+    ready: { http: "http://127.0.0.1:8000/healthz", timeoutMs: 30000 }
+    url: http://127.0.0.1:8000
+    stop: { graceMs: 5000 }
+
+  - name: celery:worker
+    project: app
+    cmd: [".venv/bin/celery", "-A", "bookstore", "worker", "--loglevel=info", "--concurrency=4"]
+    groups: [workers]
+    needs: [redis, migrate]
+    env:
+      PYTHONUNBUFFERED: "1"
+    ready: { logMatch: "ready\\.$|celery@.* ready", timeoutMs: 30000 }
+
+  - name: celery:beat
+    project: app
+    cmd: [".venv/bin/celery", "-A", "bookstore", "beat", "--loglevel=info"]
+    groups: [scheduler]
+    needs: [redis, celery:worker]
+    env:
+      PYTHONUNBUFFERED: "1"
+
+  # A second worker for a queue that only matters during imports.
+  - name: celery:imports
+    project: app
+    cmd: [".venv/bin/celery", "-A", "bookstore", "worker", "--queues=imports", "--concurrency=1"]
+    groups: [workers]
+    needs: [redis]
+    autostart: false
+    env:
+      PYTHONUNBUFFERED: "1"
+
+  # Monitoring UI — useful, but not something you need running all day.
+  - name: flower
+    project: app
+    cmd: [".venv/bin/celery", "-A", "bookstore", "flower", "--port=5555"]
+    groups: [tooling]
+    needs: [redis]
+    autostart: false
+    url: http://127.0.0.1:5555
+
+profiles:
+  no-scheduler: { except: [scheduler] }
+  workers-only: { only: [workers, redis, migrate, postgres] }

@@ -1,0 +1,76 @@
+# The smallest useful stack: a handful of watchers in one repository. No servers,
+# no databases, no projects — just the processes you would otherwise keep in six tabs.
+#
+# Demonstrates: that a "stack" does not need multiple apps or any Laravel at all, and that
+#               `cwd` alone is enough when everything lives under one root.
+#
+# Setup: point `root` at your repository, then
+#   cp -r frontend-monorepo ~/.laracrew/stacks/
+#   laracrew up frontend-monorepo
+name: frontend-monorepo
+description: Type checking, bundling and docs for a pnpm workspace
+command: fe
+
+projects:
+  root:
+    path: ~/code/design-system
+    color: cyan
+
+defaults:
+  restart: on-failure
+  backoff: { initialMs: 1000, maxMs: 10000, factor: 2, maxRestarts: 5 }
+  stop: { graceMs: 3000 }
+
+services:
+  # Types first: everything else consumes the built declarations.
+  - name: types
+    project: root
+    cwd: packages/core # relative to the project path
+    cmd: ["pnpm", "exec", "tsc", "--watch", "--preserveWatchOutput"]
+    groups: [build]
+    ready: { logMatch: "Found 0 errors|Watching for file changes", timeoutMs: 120000 }
+
+  - name: tailwind
+    project: root
+    cwd: packages/ui
+    cmd: ["pnpm", "exec", "tailwindcss", "-i", "./src/index.css", "-o", "./dist/index.css", "--watch"]
+    groups: [build]
+    ready: { logMatch: "Done in|Rebuilding", timeoutMs: 60000 }
+
+  - name: storybook
+    project: root
+    cwd: packages/ui
+    cmd: ["pnpm", "run", "storybook"]
+    groups: [docs]
+    needs: [types, tailwind]
+    ready: { logMatch: "Storybook.*started|Local:", timeoutMs: 180000 }
+    url: http://127.0.0.1:6006
+
+  - name: docs
+    project: root
+    cwd: apps/docs
+    cmd: ["pnpm", "run", "dev"] # Astro, Docusaurus, Next — whatever you use
+    groups: [docs]
+    needs: [types]
+    ready: { logMatch: "Local:|ready in", timeoutMs: 60000 }
+    url: http://127.0.0.1:4321
+
+  # Noisy on every keystroke — start it when you are actually fixing tests.
+  - name: tests
+    project: root
+    cmd: ["pnpm", "exec", "vitest", "--watch"]
+    groups: [tooling]
+    autostart: false
+    restart: never
+
+  # One-shot: select it, press `s`, watch it finish, carry on.
+  - name: lint
+    project: root
+    cmd: ["pnpm", "run", "lint:fix"]
+    groups: [tooling]
+    autostart: false
+    restart: never
+
+profiles:
+  build-only: { only: [build] }
+  no-storybook: { except: [storybook] } # it is the slowest thing here

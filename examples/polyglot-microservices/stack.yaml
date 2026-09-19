@@ -1,0 +1,120 @@
+# Four services in four languages, plus their infrastructure in Docker.
+#
+# Demonstrates: laracrew managing `docker compose` itself as a supervised process,
+#               a strict boot order enforced by HTTP and TCP gates rather than sleeps,
+#               and a gateway that refuses to start before its dependencies answer.
+#
+# This is the case laracrew is really for: the ordering is the hard part, not the running.
+#
+# Setup: edit the paths, then
+#   cp -r polyglot-microservices ~/.laracrew/stacks/
+#   laracrew up polyglot-microservices
+name: polyglot-microservices
+description: Go gateway, Rust search, Node orders, Python pricing
+command: micro
+
+projects:
+  infra:
+    path: ~/code/platform/infra # holds docker-compose.yml
+    color: yellow
+  gateway:
+    path: ~/code/platform/gateway # Go
+    color: cyan
+  search:
+    path: ~/code/platform/search # Rust
+    color: red
+  orders:
+    path: ~/code/platform/orders # Node
+    color: magenta
+  pricing:
+    path: ~/code/platform/pricing # Python
+    color: green
+
+defaults:
+  restart: on-failure
+  backoff: { initialMs: 2000, maxMs: 30000, factor: 2, maxRestarts: 8 }
+  stop: { graceMs: 10000 }
+
+services:
+  # Docker Compose is just another long-running process. laracrew starts it, streams its
+  # output, and stops it with the rest of the stack — no separate terminal, no forgetting.
+  - name: infra
+    project: infra
+    cmd: ["docker", "compose", "up"]
+    groups: [infra]
+    # Ready when every port we depend on is actually accepting connections.
+    ready: { tcp: "127.0.0.1:5432", timeoutMs: 120000, intervalMs: 1000 }
+    # Compose needs time to stop its own containers cleanly.
+    stop: { graceMs: 30000 }
+
+  - name: kafka-wait
+    external: true # nothing to start; this row exists purely as a gate
+    needs: [infra]
+    ready: { tcp: "127.0.0.1:9092", timeoutMs: 120000, intervalMs: 1000 }
+
+  # ---------------------------------------------------------------- services
+  - name: pricing
+    project: pricing
+    cmd: ["uvicorn", "app.main:app", "--reload", "--port", "${port:8001}"]
+    groups: [services]
+    needs: [infra]
+    env:
+      PYTHONUNBUFFERED: "1"
+    ready: { http: "http://127.0.0.1:8001/health", timeoutMs: 60000 }
+    url: http://127.0.0.1:8001
+
+  - name: search
+    project: search
+    cmd: ["cargo", "watch", "-x", "run"]
+    groups: [services]
+    needs: [infra]
+    env:
+      RUST_LOG: info
+    # A cold cargo build is slow; give the gate room rather than failing the boot.
+    ready: { http: "http://127.0.0.1:8002/health", timeoutMs: 300000, intervalMs: 2000 }
+    url: http://127.0.0.1:8002
+
+  - name: orders
+    project: orders
+    cmd: ["npm", "run", "dev"]
+    groups: [services]
+    needs: [infra, kafka-wait]
+    env:
+      NODE_ENV: development
+      KAFKA_BROKERS: 127.0.0.1:9092
+    ready: { http: "http://127.0.0.1:8003/health", timeoutMs: 60000 }
+    url: http://127.0.0.1:8003
+
+  # The gateway proxies all three, so it starts last — by declaration, not by sleeping.
+  - name: gateway
+    project: gateway
+    cmd: ["go", "run", "./cmd/gateway"]
+    groups: [edge]
+    needs: [pricing, search, orders]
+    env:
+      PRICING_URL: http://127.0.0.1:8001
+      SEARCH_URL: http://127.0.0.1:8002
+      ORDERS_URL: http://127.0.0.1:8003
+    ready: { http: "http://127.0.0.1:8080/health", timeoutMs: 60000 }
+    url: http://127.0.0.1:8080
+
+  # ---------------------------------------------------------------- on demand
+  - name: orders:consumer
+    project: orders
+    cmd: ["npm", "run", "consumer"]
+    groups: [workers]
+    needs: [kafka-wait]
+    autostart: false
+
+  - name: seed
+    project: infra
+    cmd: ["./scripts/seed.sh"]
+    groups: [maintenance]
+    needs: [infra]
+    autostart: false
+    restart: never
+
+profiles:
+  # Work on the gateway against services you are not editing.
+  edge-only: { only: [edge, infra, kafka-wait] }
+  no-search: { except: [search] } # skip the slow Rust rebuild
