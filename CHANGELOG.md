@@ -17,6 +17,20 @@ Planned, in order — see `.claude/PLAN.md`:
 - `laracrew run <task>` for one-shot cross-project sequences
 - Background daemon: `up --detach`, `attach`, `status`, `logs -f`
 
+## [0.2.1] — 2026-09-20
+
+### Added
+
+- **A stack builder**, [`docs/stack-builder.html`](docs/stack-builder.html) — a single self-contained
+  page that writes a `stack.yaml` from projects and process commands as you fill them in. It
+  encodes the rules the config resolver enforces, so it catches the mistakes before laracrew does:
+  a service with no command, `stop.artisan` on a service with no project, a `needs:` pointing at
+  nothing, an auto-started service depending on one you have to start by hand, a dependency cycle.
+  It also shows the boot order the `needs:` graph produces, level by level.
+
+  Open it from disk or serve `docs/` with GitHub Pages. It is not part of the npm package — no
+  runtime dependencies, no build step, nothing to install.
+
 ## [0.2.0] — 2026-09-20
 
 Graceful shutdown for any process, not only Laravel queue workers, and a `doctor` that only
@@ -166,7 +180,8 @@ once, from one command.
 - Accepted by the schema but not yet acted on: `watch`, `metrics` (read by `doctor` only), and
   `hooks`. Stack files written today stay valid.
 
-[Unreleased]: https://github.com/vidux/laracrew/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/vidux/laracrew/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/vidux/laracrew/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/vidux/laracrew/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/vidux/laracrew/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/vidux/laracrew/releases/tag/v0.1.1

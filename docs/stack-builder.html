@@ -1,0 +1,1263 @@
+<title>laracrew Stack Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  /* Light palette is the complete set; the two blocks below only redefine tokens. */
+  :root {
+    --ground: #f5f7f7;
+    --surface: #ffffff;
+    --surface-sunk: #eceff0;
+    --terminal: #10191b;
+    --terminal-ink: #d6e3e3;
+    --ink: #16211f;
+    --ink-soft: #46595a;
+    --muted: #6d8082;
+    --line: #dae1e1;
+    --line-strong: #c3cecf;
+    --accent: #0f7d86;
+    --accent-ink: #ffffff;
+    --accent-wash: #e2f1f2;
+
+    /* Colour carries state, nothing else — the rule from src/tui/theme.ts. */
+    --ok: #2c7a51;
+    --ok-wash: #e0f0e7;
+    --warn: #8a5d00;
+    --warn-wash: #f8eed6;
+    --bad: #a83535;
+    --bad-wash: #f7e2e2;
+
+    --radius: 7px;
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0d1315;
+      --surface: #141d1f;
+      --surface-sunk: #0f1719;
+      --terminal: #0a1012;
+      --terminal-ink: #cfdedd;
+      --ink: #e2eaea;
+      --ink-soft: #a9bbbb;
+      --muted: #7e9192;
+      --line: #222f32;
+      --line-strong: #324447;
+      --accent: #38c8d1;
+      --accent-ink: #06181a;
+      --accent-wash: #11302f;
+      --ok: #59cf92;
+      --ok-wash: #113023;
+      --warn: #e8b055;
+      --warn-wash: #2f2412;
+      --bad: #ff8080;
+      --bad-wash: #341b1b;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0d1315;
+    --surface: #141d1f;
+    --surface-sunk: #0f1719;
+    --terminal: #0a1012;
+    --terminal-ink: #cfdedd;
+    --ink: #e2eaea;
+    --ink-soft: #a9bbbb;
+    --muted: #7e9192;
+    --line: #222f32;
+    --line-strong: #324447;
+    --accent: #38c8d1;
+    --accent-ink: #06181a;
+    --accent-wash: #11302f;
+    --ok: #59cf92;
+    --ok-wash: #113023;
+    --warn: #e8b055;
+    --warn-wash: #2f2412;
+    --bad: #ff8080;
+    --bad-wash: #341b1b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding-block: 28px 64px;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  header.masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px 16px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand {
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .brand b { color: var(--accent); font-weight: 600; }
+  .masthead p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 62ch;
+    flex: 1 1 320px;
+  }
+  .theme-toggle {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    padding: 6px 11px;
+    cursor: pointer;
+  }
+  .theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
+  .columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 26px;
+    align-items: start;
+    margin-top: 24px;
+  }
+  @media (max-width: 960px) { .columns { grid-template-columns: minmax(0, 1fr); } }
+
+  section.panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 18px;
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .panel-head h2 {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 0;
+  }
+  .count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--surface-sunk);
+    border-radius: 20px;
+    padding: 1px 8px;
+  }
+  .panel-note {
+    margin: 0 0 14px;
+    color: var(--muted);
+    font-size: 13px;
+    max-width: 62ch;
+  }
+
+  label.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  label.field > span {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  input[type="text"], select, textarea {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--surface-sunk);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 7px 9px;
+    width: 100%;
+    min-width: 0;
+  }
+  textarea { resize: vertical; min-height: 58px; line-height: 1.45; }
+  input[type="text"]:focus-visible, select:focus-visible, textarea:focus-visible,
+  button:focus-visible, .chk:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.75; }
+
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 620px) { .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); } }
+
+  .rows { display: flex; flex-direction: column; gap: 12px; }
+
+  .row {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .row.is-external { border-left-color: var(--muted); }
+  .row.is-idle { border-left-color: var(--warn); }
+  .row.is-live { border-left-color: var(--ok); }
+
+  .row-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .glyph { font-family: var(--mono); font-size: 15px; line-height: 1; }
+  .glyph.live { color: var(--ok); }
+  .glyph.idle { color: var(--warn); }
+  .glyph.ext { color: var(--muted); }
+  .row-title {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    flex: 1 1 180px;
+    min-width: 0;
+  }
+  .row-title input { background: transparent; border-color: transparent; padding-left: 4px; }
+  .row-title input:hover { border-color: var(--line); }
+
+  button {
+    font-family: var(--sans);
+    font-size: 13px;
+    border-radius: 5px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    color: var(--ink-soft);
+    padding: 6px 11px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.add {
+    font-family: var(--mono);
+    font-size: 12px;
+    border-style: dashed;
+    width: 100%;
+    padding: 9px;
+    margin-top: 12px;
+  }
+  button.kill {
+    border-color: transparent;
+    color: var(--muted);
+    padding: 4px 8px;
+    font-family: var(--mono);
+  }
+  button.kill:hover { color: var(--bad); border-color: var(--bad); }
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+  button.primary:hover { filter: brightness(1.08); color: var(--accent-ink); }
+
+  .chk {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+    background: var(--surface-sunk);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 4px 11px 4px 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .chk input { accent-color: var(--accent); margin: 0; }
+  .chk.on { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
+
+  .toggles { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+  .swatch {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+  }
+  .swatch[aria-pressed="true"] { border-color: var(--ink); }
+
+  details.more { border-top: 1px dashed var(--line); padding-top: 10px; }
+  details.more > summary {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    list-style: none;
+  }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more > summary::before { content: "▸ "; }
+  details.more[open] > summary::before { content: "▾ "; }
+  details.more > div { padding-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+
+  /* ---- output side ---- */
+  .sticky { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+
+  .yaml-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .path {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    flex: 1 1 200px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .path b { color: var(--accent); font-weight: 500; }
+
+  pre.yaml {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.55;
+    background: var(--terminal);
+    color: var(--terminal-ink);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin: 0;
+    overflow-x: auto;
+    max-height: 56vh;
+    tab-size: 2;
+  }
+  pre.yaml .k { color: #7fd1d8; }
+  pre.yaml .s { color: #e3c07b; }
+  pre.yaml .c { color: #6c8385; font-style: italic; }
+  pre.yaml .d { color: #b6cfd0; }
+
+  .checks { margin-top: 14px; display: flex; flex-direction: column; gap: 7px; }
+  .check {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    font-size: 13px;
+    border-radius: 5px;
+    padding: 7px 10px;
+    border: 1px solid transparent;
+  }
+  .check .mark { font-family: var(--mono); line-height: 1.4; }
+  .check.ok { color: var(--ok); background: var(--ok-wash); border-color: color-mix(in srgb, var(--ok) 25%, transparent); }
+  .check.warn { color: var(--warn); background: var(--warn-wash); border-color: color-mix(in srgb, var(--warn) 25%, transparent); }
+  .check.bad { color: var(--bad); background: var(--bad-wash); border-color: color-mix(in srgb, var(--bad) 30%, transparent); }
+  .check code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    padding: 0 4px;
+    border-radius: 3px;
+  }
+
+  .tree {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    white-space: pre;
+    overflow-x: auto;
+    margin: 0;
+  }
+  .tree .lvl { color: var(--muted); }
+  .tree .ext { color: var(--muted); }
+  .tree .idle { color: var(--warn); }
+  .tree .live { color: var(--ok); }
+
+  footer.tips {
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  footer.tips code, .inline-code {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+    background: var(--surface-sunk);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  footer.tips a { color: var(--accent); }
+
+  .example-flag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--warn);
+    background: var(--warn-wash);
+    border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+    border-radius: 20px;
+    padding: 2px 9px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand">lara<b>crew</b> stack builder</div>
+    <p>
+      Describe your projects and the processes that run under them. The
+      <code class="inline-code">stack.yaml</code> on the right is written as you type, and the checks
+      below it are the same rules <code class="inline-code">laracrew doctor</code> enforces.
+    </p>
+    <button class="theme-toggle" id="theme-toggle" type="button">theme</button>
+  </header>
+
+  <div class="columns">
+    <!-- ============ builder ============ -->
+    <div>
+      <section class="panel">
+        <div class="panel-head"><h2>Stack</h2><span class="example-flag" id="example-flag">example — edit or clear</span></div>
+        <p class="panel-note">
+          The name must match the folder it lives in. <code class="inline-code">command</code> is what
+          <code class="inline-code">laracrew link</code> installs, so the whole set boots by typing one word.
+        </p>
+        <div class="grid3">
+          <label class="field"><span>name</span><input type="text" id="stack-name" placeholder="dual"></label>
+          <label class="field"><span>command</span><input type="text" id="stack-command" placeholder="dual"></label>
+          <label class="field"><span>default restart</span>
+            <select id="stack-restart">
+              <option value="on-failure">on-failure</option>
+              <option value="always">always</option>
+              <option value="never">never</option>
+            </select>
+          </label>
+        </div>
+        <div style="margin-top:12px">
+          <label class="field"><span>description</span><input type="text" id="stack-description" placeholder="API + Portal with queues, streams and schedulers"></label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Projects</h2><span class="count" id="project-count">0</span></div>
+        <p class="panel-note">
+          A project is a root directory plus what its services inherit — working directory, its
+          <code class="inline-code">.env</code>, and a colour. Any language. Services can also carry their
+          own <code class="inline-code">cwd</code> instead, so this section is optional.
+        </p>
+        <div class="rows" id="projects"></div>
+        <button class="add" type="button" id="add-project">+ add project</button>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Services</h2><span class="count" id="service-count">0</span></div>
+        <p class="panel-note">
+          One long-running process each. Mark a service <b>checked only</b> when laracrew should verify
+          it but never start it — Redis, Postgres, anything already running.
+        </p>
+        <div class="rows" id="services"></div>
+        <button class="add" type="button" id="add-service">+ add service</button>
+      </section>
+    </div>
+
+    <!-- ============ output ============ -->
+    <div>
+      <div class="sticky">
+        <section class="panel">
+          <div class="yaml-head">
+            <div class="path">~/.laracrew/stacks/<b id="path-name">dual</b>/stack.yaml</div>
+            <button class="primary" type="button" id="copy">Copy YAML</button>
+          </div>
+          <pre class="yaml" id="yaml" aria-live="polite"></pre>
+          <div class="checks" id="checks"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>Boot order</h2></div>
+          <p class="panel-note">
+            Computed from <code class="inline-code">needs:</code> — everything on one level starts in
+            parallel, and laracrew waits for each level's readiness gates before the next.
+          </p>
+          <pre class="tree" id="tree"></pre>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <footer class="tips">
+    Save the file, then <code>laracrew doctor &lt;name&gt;</code> before <code>laracrew up &lt;name&gt;</code>.
+    Full field reference in
+    <a href="https://github.com/vidux/laracrew#configuring-a-stack">the README</a> ·
+    <a href="https://github.com/vidux/laracrew/tree/main/examples">five worked examples</a>.
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // The project colour palette, in the order src/core/config/resolve.ts assigns them.
+  var PALETTE = ["cyan", "magenta", "green", "yellow", "blue", "red"];
+  var SWATCH = {
+    cyan: "#2aa7b0", magenta: "#b558ae", green: "#3f9c60",
+    yellow: "#c69214", blue: "#4a7fd0", red: "#c45252"
+  };
+
+  var uid = 0;
+  function nextId() { uid += 1; return "i" + uid; }
+
+  // Opens holding a real two-project stack so the page shows what it does at rest.
+  var state = {
+    name: "dual",
+    command: "dual",
+    description: "API + Portal with queues, streams and schedulers",
+    restart: "on-failure",
+    projects: [
+      { id: nextId(), key: "api", path: "D:/work/api", php: "php", envFile: ".env", color: "cyan" },
+      { id: nextId(), key: "portal", path: "D:/work/portal", php: "php", envFile: ".env", color: "magenta" }
+    ],
+    services: [
+      {
+        id: nextId(), name: "redis", project: "", cmd: "", argv: false, groups: "",
+        needs: [], external: true, autostart: true, restart: "", url: "",
+        readyKind: "tcp", readyValue: "127.0.0.1:6379", readyTimeout: "",
+        stopKind: "none", stopValue: "", graceMs: ""
+      },
+      {
+        id: nextId(), name: "api:serve", project: "api", cmd: "php artisan serve --port=8000",
+        argv: false, groups: "http", needs: ["redis"], external: false, autostart: true,
+        restart: "", url: "http://127.0.0.1:8000",
+        readyKind: "http", readyValue: "http://127.0.0.1:8000/up", readyTimeout: "20000",
+        stopKind: "none", stopValue: "", graceMs: ""
+      },
+      {
+        id: nextId(), name: "api:queue", project: "api",
+        cmd: "php artisan queue:work redis --queue=high,default --tries=3",
+        argv: false, groups: "workers", needs: ["redis"], external: false, autostart: true,
+        restart: "", url: "",
+        readyKind: "none", readyValue: "", readyTimeout: "",
+        stopKind: "artisan", stopValue: "queue:restart", graceMs: "15000"
+      },
+      {
+        id: nextId(), name: "portal:serve", project: "portal", cmd: "php artisan serve --port=8001",
+        argv: false, groups: "http", needs: ["redis", "api:serve"], external: false, autostart: true,
+        restart: "", url: "http://127.0.0.1:8001",
+        readyKind: "http", readyValue: "http://127.0.0.1:8001/up", readyTimeout: "",
+        stopKind: "none", stopValue: "", graceMs: ""
+      }
+    ]
+  };
+
+  var el = {
+    projects: document.getElementById("projects"),
+    services: document.getElementById("services"),
+    yaml: document.getElementById("yaml"),
+    checks: document.getElementById("checks"),
+    tree: document.getElementById("tree"),
+    pathName: document.getElementById("path-name"),
+    projectCount: document.getElementById("project-count"),
+    serviceCount: document.getElementById("service-count"),
+    exampleFlag: document.getElementById("example-flag")
+  };
+
+  var touched = false;
+  function markTouched() {
+    if (touched) return;
+    touched = true;
+    el.exampleFlag.hidden = true;
+  }
+
+  /* ---------------- small DOM helpers ---------------- */
+
+  function node(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function field(labelText, value, placeholder, onInput) {
+    var wrap = node("label", "field");
+    wrap.appendChild(node("span", null, labelText));
+    var input = document.createElement("input");
+    input.type = "text";
+    input.id = nextId();
+    input.value = value || "";
+    if (placeholder) input.placeholder = placeholder;
+    input.addEventListener("input", function () { markTouched(); onInput(input.value); });
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  function picker(labelText, value, options, onChange) {
+    var wrap = node("label", "field");
+    wrap.appendChild(node("span", null, labelText));
+    var sel = document.createElement("select");
+    sel.id = nextId();
+    options.forEach(function (opt) {
+      var o = document.createElement("option");
+      o.value = opt.value;
+      o.textContent = opt.label;
+      if (opt.value === value) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener("change", function () { markTouched(); onChange(sel.value); });
+    wrap.appendChild(sel);
+    return wrap;
+  }
+
+  function toggle(labelText, checked, onChange) {
+    var lab = node("label", "chk" + (checked ? " on" : ""));
+    var box = document.createElement("input");
+    box.type = "checkbox";
+    box.id = nextId();
+    box.checked = !!checked;
+    box.addEventListener("change", function () {
+      markTouched();
+      lab.classList.toggle("on", box.checked);
+      onChange(box.checked);
+    });
+    lab.appendChild(box);
+    lab.appendChild(document.createTextNode(labelText));
+    return lab;
+  }
+
+  /* ---------------- projects ---------------- */
+
+  function renderProjects() {
+    el.projects.textContent = "";
+    state.projects.forEach(function (p) {
+      var row = node("div", "row");
+      row.style.borderLeftColor = SWATCH[p.color] || "var(--line-strong)";
+
+      var top = node("div", "row-top");
+      var title = node("div", "row-title");
+      var keyInput = document.createElement("input");
+      keyInput.type = "text";
+      keyInput.id = nextId();
+      keyInput.value = p.key;
+      keyInput.placeholder = "api";
+      keyInput.setAttribute("aria-label", "project key");
+      keyInput.addEventListener("input", function () {
+        markTouched();
+        var old = p.key;
+        p.key = keyInput.value.trim();
+        state.services.forEach(function (s) { if (s.project === old) s.project = p.key; });
+        renderServices();
+        refresh();
+      });
+      title.appendChild(keyInput);
+      top.appendChild(title);
+
+      var sw = node("div", "swatches");
+      PALETTE.forEach(function (colour) {
+        var b = node("button", "swatch");
+        b.type = "button";
+        b.style.background = SWATCH[colour];
+        b.title = colour;
+        b.setAttribute("aria-label", "colour " + colour);
+        b.setAttribute("aria-pressed", String(p.color === colour));
+        b.addEventListener("click", function () {
+          markTouched();
+          p.color = p.color === colour ? "" : colour;
+          renderProjects();
+          refresh();
+        });
+        sw.appendChild(b);
+      });
+      top.appendChild(sw);
+
+      var del = node("button", "kill", "remove");
+      del.type = "button";
+      del.addEventListener("click", function () {
+        markTouched();
+        state.projects = state.projects.filter(function (x) { return x.id !== p.id; });
+        state.services.forEach(function (s) { if (s.project === p.key) s.project = ""; });
+        renderProjects();
+        renderServices();
+        refresh();
+      });
+      top.appendChild(del);
+      row.appendChild(top);
+
+      row.appendChild(field("path", p.path, "D:/work/api", function (v) { p.path = v; refresh(); }));
+
+      var more = node("details", "more");
+      var sum = node("summary", null, "env file, php binary");
+      more.appendChild(sum);
+      var body = node("div");
+      var pair = node("div", "grid2");
+      pair.appendChild(field("env file", p.envFile, ".env", function (v) { p.envFile = v; refresh(); }));
+      pair.appendChild(field("php binary", p.php, "php", function (v) { p.php = v; refresh(); }));
+      body.appendChild(pair);
+      body.appendChild(node("p", "panel-note",
+        "php is only used by the stop.artisan shorthand — leave it alone for a Node or Python project."));
+      more.appendChild(body);
+      row.appendChild(more);
+
+      el.projects.appendChild(row);
+    });
+    el.projectCount.textContent = String(state.projects.length);
+  }
+
+  /* ---------------- services ---------------- */
+
+  function stateClass(s) {
+    if (s.external) return "is-external";
+    if (!s.autostart) return "is-idle";
+    return "is-live";
+  }
+  function stateGlyph(s) {
+    if (s.external) return { g: "\u25CF", cls: "ext", label: "checked, not started" };
+    if (!s.autostart) return { g: "\u25CB", cls: "idle", label: "idle until you press s" };
+    return { g: "\u25CF", cls: "live", label: "starts with the stack" };
+  }
+
+  function renderServices() {
+    el.services.textContent = "";
+    state.services.forEach(function (s) {
+      var row = node("div", "row " + stateClass(s));
+
+      var top = node("div", "row-top");
+      var mark = stateGlyph(s);
+      var glyph = node("span", "glyph " + mark.cls, mark.g);
+      glyph.title = mark.label;
+      top.appendChild(glyph);
+
+      var title = node("div", "row-title");
+      var nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.id = nextId();
+      nameInput.value = s.name;
+      nameInput.placeholder = "api:queue";
+      nameInput.setAttribute("aria-label", "service name");
+      nameInput.addEventListener("input", function () {
+        markTouched();
+        var old = s.name;
+        s.name = nameInput.value.trim();
+        state.services.forEach(function (other) {
+          other.needs = other.needs.map(function (n) { return n === old ? s.name : n; });
+        });
+        renderNeeds();
+        refresh();
+      });
+      title.appendChild(nameInput);
+      top.appendChild(title);
+
+      var del = node("button", "kill", "remove");
+      del.type = "button";
+      del.addEventListener("click", function () {
+        markTouched();
+        state.services = state.services.filter(function (x) { return x.id !== s.id; });
+        state.services.forEach(function (other) {
+          other.needs = other.needs.filter(function (n) { return n !== s.name; });
+        });
+        renderServices();
+        refresh();
+      });
+      top.appendChild(del);
+      row.appendChild(top);
+
+      var toggles = node("div", "toggles");
+      toggles.appendChild(toggle("checked only, never started", s.external, function (v) {
+        s.external = v;
+        if (v && s.readyKind === "none") { s.readyKind = "tcp"; }
+        renderServices();
+        refresh();
+      }));
+      if (!s.external) {
+        toggles.appendChild(toggle("start with the stack", s.autostart, function (v) {
+          s.autostart = v;
+          renderServices();
+          refresh();
+        }));
+      }
+      row.appendChild(toggles);
+
+      if (!s.external) {
+        var head = node("div", "grid2");
+        var projectOptions = [{ value: "", label: "— no project (own cwd) —" }];
+        state.projects.forEach(function (p) {
+          if (p.key) projectOptions.push({ value: p.key, label: p.key });
+        });
+        head.appendChild(picker("project", s.project, projectOptions, function (v) {
+          s.project = v; refresh();
+        }));
+        head.appendChild(field("groups", s.groups, "workers, http", function (v) { s.groups = v; refresh(); }));
+        row.appendChild(head);
+
+        var cmdWrap = node("label", "field");
+        cmdWrap.appendChild(node("span", null, "command"));
+        var cmd = document.createElement("textarea");
+        cmd.id = nextId();
+        cmd.rows = 2;
+        cmd.value = s.cmd;
+        cmd.placeholder = "php artisan queue:work   ·   npm run dev   ·   .venv/bin/celery -A app worker";
+        cmd.addEventListener("input", function () { markTouched(); s.cmd = cmd.value; refresh(); });
+        cmdWrap.appendChild(cmd);
+        row.appendChild(cmdWrap);
+
+        row.appendChild(toggle("write as an argv array (no shell parsing)", s.argv, function (v) {
+          s.argv = v; refresh();
+        }));
+      }
+
+      // needs
+      var needsWrap = node("div", "field needs");
+      needsWrap.dataset.for = s.id;
+      row.appendChild(needsWrap);
+
+      // readiness + stop
+      var more = node("details", "more");
+      more.appendChild(node("summary", null, s.external ? "how to check it" : "readiness gate, graceful stop"));
+      var body = node("div");
+
+      var readyGrid = node("div", "grid3");
+      readyGrid.appendChild(picker("ready when", s.readyKind, [
+        { value: "none", label: s.external ? "— none —" : "spawned (default)" },
+        { value: "tcp", label: "tcp answers" },
+        { value: "http", label: "http answers" },
+        { value: "logMatch", label: "log line matches" },
+        { value: "delayMs", label: "fixed delay (ms)" }
+      ], function (v) { s.readyKind = v; renderServices(); refresh(); }));
+      if (s.readyKind !== "none") {
+        readyGrid.appendChild(field(
+          s.readyKind === "tcp" ? "host:port"
+            : s.readyKind === "http" ? "url"
+            : s.readyKind === "logMatch" ? "regex" : "milliseconds",
+          s.readyValue,
+          s.readyKind === "tcp" ? "127.0.0.1:6379"
+            : s.readyKind === "http" ? "http://127.0.0.1:8000/up"
+            : s.readyKind === "logMatch" ? "ready in|Local:" : "1500",
+          function (v) { s.readyValue = v; refresh(); }
+        ));
+        readyGrid.appendChild(field("timeout ms", s.readyTimeout, "30000", function (v) { s.readyTimeout = v; refresh(); }));
+      }
+      body.appendChild(readyGrid);
+
+      if (!s.external) {
+        var stopGrid = node("div", "grid3");
+        stopGrid.appendChild(picker("graceful stop", s.stopKind, [
+          { value: "none", label: "— signal only —" },
+          { value: "exec", label: "run a command" },
+          { value: "artisan", label: "artisan (Laravel)" }
+        ], function (v) { s.stopKind = v; renderServices(); refresh(); }));
+        if (s.stopKind !== "none") {
+          stopGrid.appendChild(field(
+            s.stopKind === "artisan" ? "artisan command" : "command",
+            s.stopValue,
+            s.stopKind === "artisan" ? "queue:restart" : "celery -A app control shutdown",
+            function (v) { s.stopValue = v; refresh(); }
+          ));
+        }
+        stopGrid.appendChild(field("grace ms", s.graceMs, "10000", function (v) { s.graceMs = v; refresh(); }));
+        body.appendChild(stopGrid);
+
+        var tail = node("div", "grid2");
+        tail.appendChild(picker("restart", s.restart, [
+          { value: "", label: "inherit (" + state.restart + ")" },
+          { value: "on-failure", label: "on-failure" },
+          { value: "always", label: "always" },
+          { value: "never", label: "never" }
+        ], function (v) { s.restart = v; refresh(); }));
+        tail.appendChild(field("url", s.url, "http://127.0.0.1:8000", function (v) { s.url = v; refresh(); }));
+        body.appendChild(tail);
+      }
+
+      more.appendChild(body);
+      row.appendChild(more);
+
+      el.services.appendChild(row);
+    });
+
+    el.serviceCount.textContent = String(state.services.length);
+    renderNeeds();
+  }
+
+  /** Rebuilt on its own so typing a name refreshes every other service's list without losing focus. */
+  function renderNeeds() {
+    var boxes = el.services.querySelectorAll(".needs");
+    Array.prototype.forEach.call(boxes, function (box) {
+      var s = state.services.filter(function (x) { return x.id === box.dataset.for; })[0];
+      if (!s) return;
+      box.textContent = "";
+      var others = state.services.filter(function (x) { return x.id !== s.id && x.name; });
+      box.appendChild(node("span", null, others.length ? "needs" : "needs — add another service first"));
+      if (!others.length) return;
+      var group = node("div", "toggles");
+      others.forEach(function (other) {
+        group.appendChild(toggle(other.name, s.needs.indexOf(other.name) !== -1, function (on) {
+          s.needs = s.needs.filter(function (n) { return n !== other.name; });
+          if (on) s.needs.push(other.name);
+          refresh();
+        }));
+      });
+      box.appendChild(group);
+    });
+  }
+
+  /* ---------------- YAML ---------------- */
+
+  // Quote only when YAML would otherwise misread the scalar.
+  function scalar(value) {
+    var v = String(value);
+    if (v === "") return '""';
+    if (/^[\s]|[\s]$/.test(v)) return JSON.stringify(v);
+    if (/^(true|false|null|yes|no|on|off|~)$/i.test(v)) return JSON.stringify(v);
+    if (/^-?\d+(\.\d+)?$/.test(v)) return JSON.stringify(v);
+    if (/[:#\[\]{}&*!|>'"%@`,]/.test(v)) return JSON.stringify(v);
+    return v;
+  }
+
+  function list(values) {
+    return "[" + values.map(scalar).join(", ") + "]";
+  }
+
+  function argvOf(line) {
+    // Good enough for a generator: split on whitespace, keep quoted runs together.
+    var out = [];
+    var re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+    var m;
+    while ((m = re.exec(line)) !== null) out.push(m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]);
+    return out;
+  }
+
+  function buildYaml() {
+    var L = [];
+    var name = state.name.trim() || "my-stack";
+
+    L.push("# Generated by the laracrew stack builder.");
+    L.push("# Save as ~/.laracrew/stacks/" + name + "/stack.yaml — the folder must match `name`.");
+    L.push("name: " + scalar(name));
+    if (state.description.trim()) L.push("description: " + scalar(state.description.trim()));
+    if (state.command.trim()) L.push("command: " + scalar(state.command.trim()) + "          # laracrew link " + name);
+
+    var projects = state.projects.filter(function (p) { return p.key && p.path; });
+    if (projects.length) {
+      L.push("");
+      L.push("projects:");
+      projects.forEach(function (p) {
+        L.push("  " + scalar(p.key) + ":");
+        L.push("    path: " + scalar(p.path));
+        if (p.envFile && p.envFile !== ".env") L.push("    envFile: " + scalar(p.envFile));
+        if (p.php && p.php !== "php") L.push("    php: " + scalar(p.php));
+        if (p.color) L.push("    color: " + p.color);
+      });
+    }
+
+    L.push("");
+    L.push("defaults:");
+    L.push("  restart: " + state.restart);
+
+    L.push("");
+    L.push("services:");
+    state.services.forEach(function (s, index) {
+      if (!s.name) return;
+      if (index > 0) L.push("");
+      L.push("  - name: " + scalar(s.name));
+
+      if (s.external) {
+        L.push("    external: true            # checked, never started by laracrew");
+      } else {
+        if (s.project) L.push("    project: " + scalar(s.project));
+        if (s.cmd.trim()) {
+          L.push("    cmd: " + (s.argv ? list(argvOf(s.cmd.trim())) : scalar(s.cmd.trim())));
+        }
+        var groups = s.groups.split(",").map(function (g) { return g.trim(); }).filter(Boolean);
+        if (groups.length) L.push("    groups: " + list(groups));
+      }
+
+      if (s.needs.length) L.push("    needs: " + list(s.needs));
+
+      if (s.readyKind !== "none" && String(s.readyValue).trim()) {
+        var inner = s.readyKind + ": " + (s.readyKind === "delayMs" ? s.readyValue : scalar(s.readyValue));
+        if (String(s.readyTimeout).trim()) inner += ", timeoutMs: " + s.readyTimeout;
+        L.push("    ready: { " + inner + " }");
+      }
+
+      if (!s.external) {
+        if (!s.autostart) L.push("    autostart: false          # defined and listed, started on demand");
+        if (s.restart) L.push("    restart: " + s.restart);
+
+        var stopBits = [];
+        if (s.stopKind === "exec" && s.stopValue.trim()) {
+          stopBits.push("exec: " + (s.argv ? list(argvOf(s.stopValue.trim())) : scalar(s.stopValue.trim())));
+        } else if (s.stopKind === "artisan" && s.stopValue.trim()) {
+          stopBits.push("artisan: " + scalar(s.stopValue.trim()));
+        }
+        if (String(s.graceMs).trim()) stopBits.push("graceMs: " + s.graceMs);
+        if (stopBits.length) L.push("    stop: { " + stopBits.join(", ") + " }");
+
+        if (s.url.trim()) L.push("    url: " + scalar(s.url.trim()));
+      }
+    });
+
+    return L.join("\n") + "\n";
+  }
+
+  function paintYaml(text) {
+    var safe = text.replace(/[&<>]/g, function (c) {
+      return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;";
+    });
+    return safe.split("\n").map(function (line) {
+      if (/^\s*#/.test(line)) return '<span class="c">' + line + "</span>";
+      var inlineComment = "";
+      var hashAt = line.indexOf("  #");
+      if (hashAt > -1) {
+        inlineComment = '<span class="c">' + line.slice(hashAt) + "</span>";
+        line = line.slice(0, hashAt);
+      }
+      var painted = line.replace(/^(\s*-?\s*)([A-Za-z_][\w.-]*)(:)/, function (_, lead, key, colon) {
+        return lead + '<span class="k">' + key + "</span>" + colon;
+      });
+      painted = painted.replace(/("(?:[^"\\]|\\.)*")/g, '<span class="s">$1</span>');
+      return '<span class="d">' + painted + "</span>" + inlineComment;
+    }).join("\n");
+  }
+
+  /* ---------------- checks (the rules laracrew itself enforces) ---------------- */
+
+  function levelsOf(services) {
+    var names = {};
+    services.forEach(function (s) { names[s.name] = true; });
+    var pending = services.map(function (s) {
+      return { name: s.name, svc: s, needs: s.needs.filter(function (n) { return names[n]; }) };
+    });
+    var done = {};
+    var levels = [];
+    var guard = 0;
+    while (pending.length && guard < 60) {
+      guard += 1;
+      var ready = pending.filter(function (p) {
+        return p.needs.every(function (n) { return done[n]; });
+      });
+      if (!ready.length) return { levels: levels, stuck: pending.map(function (p) { return p.name; }) };
+      ready.forEach(function (p) { done[p.name] = true; });
+      levels.push(ready);
+      pending = pending.filter(function (p) { return !done[p.name]; });
+    }
+    return { levels: levels, stuck: [] };
+  }
+
+  function runChecks() {
+    var out = [];
+    var named = state.services.filter(function (s) { return s.name; });
+    var byName = {};
+    named.forEach(function (s) { byName[s.name] = s; });
+
+    if (!state.name.trim()) {
+      out.push({ level: "bad", text: "The stack needs a name — it must match the folder it is saved in." });
+    }
+    if (!named.length) {
+      out.push({ level: "bad", text: "A stack needs at least one service." });
+    }
+
+    var seen = {};
+    named.forEach(function (s) {
+      if (seen[s.name]) out.push({ level: "bad", text: "Two services are both named " + code(s.name) + "." });
+      seen[s.name] = true;
+    });
+
+    named.forEach(function (s) {
+      if (!s.external && !s.cmd.trim()) {
+        out.push({ level: "bad", text: code(s.name) + " needs a command, unless it is checked only." });
+      }
+      if (s.external && (s.readyKind === "none" || !String(s.readyValue).trim())) {
+        out.push({ level: "warn", text: code(s.name) + " is checked only but declares no way to check it — give it a tcp or http gate." });
+      }
+      if (s.stopKind === "artisan" && !s.project) {
+        out.push({
+          level: "bad",
+          text: code(s.name) + " uses the artisan stop shorthand but belongs to no project. Pick a project, or switch to " + code("run a command") + "."
+        });
+      }
+      s.needs.forEach(function (n) {
+        if (!byName[n]) out.push({ level: "bad", text: code(s.name) + " needs " + code(n) + ", which is not in this stack." });
+      });
+      if (!s.external && s.autostart) {
+        s.needs.forEach(function (n) {
+          var dep = byName[n];
+          if (dep && !dep.external && !dep.autostart) {
+            out.push({
+              level: "bad",
+              text: code(s.name) + " starts with the stack but needs " + code(n) + ", which does not. laracrew refuses this rather than waiting on a gate nobody opens."
+            });
+          }
+        });
+      }
+      if (s.project) {
+        var known = state.projects.some(function (p) { return p.key === s.project; });
+        if (!known) out.push({ level: "bad", text: code(s.name) + " points at project " + code(s.project) + ", which this stack does not define." });
+      }
+    });
+
+    state.projects.forEach(function (p) {
+      if (p.key && !p.path.trim()) out.push({ level: "warn", text: "Project " + code(p.key) + " has no path yet." });
+    });
+
+    var order = levelsOf(named);
+    if (order.stuck.length) {
+      out.push({ level: "bad", text: "Dependency cycle between " + code(order.stuck.join(" → ")) + "." });
+    }
+
+    if (!out.length) {
+      out.push({ level: "ok", text: "No problems. " + named.length + " services across " + order.levels.length + " boot level" + (order.levels.length === 1 ? "" : "s") + "." });
+    }
+    return { findings: out, order: order };
+  }
+
+  function code(text) { return "<code>" + String(text).replace(/</g, "&lt;") + "</code>"; }
+
+  function renderChecks(findings) {
+    el.checks.textContent = "";
+    var glyphs = { ok: "\u2714", warn: "\u25B2", bad: "\u2716" };
+    findings.forEach(function (f) {
+      var row = node("div", "check " + f.level);
+      row.appendChild(node("span", "mark", glyphs[f.level]));
+      var body = node("span");
+      body.innerHTML = f.text;
+      row.appendChild(body);
+      el.checks.appendChild(row);
+    });
+  }
+
+  function renderTree(order) {
+    if (!order.levels.length) { el.tree.textContent = "  nothing to start yet"; return; }
+    var lines = [];
+    order.levels.forEach(function (level, i) {
+      lines.push('<span class="lvl">level ' + (i + 1) + (i === 0 ? "  (starts immediately)" : "  (waits for level " + i + ")") + "</span>");
+      level.forEach(function (entry, j) {
+        var s = entry.svc;
+        var last = j === level.length - 1;
+        var cls = s.external ? "ext" : !s.autostart ? "idle" : "live";
+        var glyph = s.external ? "\u25CF" : !s.autostart ? "\u25CB" : "\u25CF";
+        var note = s.external ? "  checked, not managed" : !s.autostart ? "  idle — press s" : "";
+        lines.push("  " + (last ? "\u2514\u2500" : "\u251C\u2500") + ' <span class="' + cls + '">' + glyph + "</span> " +
+          escapeHtml(s.name) + '<span class="lvl">' + note + "</span>");
+      });
+    });
+    el.tree.innerHTML = lines.join("\n");
+  }
+
+  function escapeHtml(t) {
+    return String(t).replace(/[&<>]/g, function (c) {
+      return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;";
+    });
+  }
+
+  /* ---------------- wiring ---------------- */
+
+  var yamlText = "";
+
+  function refresh() {
+    yamlText = buildYaml();
+    el.yaml.innerHTML = paintYaml(yamlText);
+    el.pathName.textContent = state.name.trim() || "my-stack";
+    var result = runChecks();
+    renderChecks(result.findings);
+    renderTree(result.order);
+  }
+
+  function bindTop(id, key, after) {
+    var input = document.getElementById(id);
+    input.value = state[key];
+    input.addEventListener(input.tagName === "SELECT" ? "change" : "input", function () {
+      markTouched();
+      state[key] = input.value;
+      if (after) after();
+      refresh();
+    });
+  }
+
+  bindTop("stack-name", "name");
+  bindTop("stack-command", "command");
+  bindTop("stack-description", "description");
+  bindTop("stack-restart", "restart", function () { renderServices(); });
+
+  document.getElementById("add-project").addEventListener("click", function () {
+    markTouched();
+    state.projects.push({
+      id: nextId(), key: "", path: "", php: "php", envFile: ".env",
+      color: PALETTE[state.projects.length % PALETTE.length]
+    });
+    renderProjects();
+    renderServices();
+    refresh();
+  });
+
+  document.getElementById("add-service").addEventListener("click", function () {
+    markTouched();
+    state.services.push({
+      id: nextId(), name: "", project: "", cmd: "", argv: false, groups: "",
+      needs: [], external: false, autostart: true, restart: "", url: "",
+      readyKind: "none", readyValue: "", readyTimeout: "",
+      stopKind: "none", stopValue: "", graceMs: ""
+    });
+    renderServices();
+    refresh();
+  });
+
+  var copyButton = document.getElementById("copy");
+  copyButton.addEventListener("click", function () {
+    var done = function (ok) {
+      copyButton.textContent = ok ? "Copied" : "Select it and copy";
+      setTimeout(function () { copyButton.textContent = "Copy YAML"; }, 1800);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(yamlText).then(function () { done(true); }, function () { selectYaml(); done(false); });
+    } else {
+      selectYaml();
+      done(false);
+    }
+  });
+
+  function selectYaml() {
+    var range = document.createRange();
+    range.selectNodeContents(el.yaml);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  var toggleButton = document.getElementById("theme-toggle");
+  toggleButton.addEventListener("click", function () {
+    var root = document.documentElement;
+    var dark = root.getAttribute("data-theme") === "dark" ||
+      (!root.hasAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    root.setAttribute("data-theme", dark ? "light" : "dark");
+  });
+
+  renderProjects();
+  renderServices();
+  refresh();
+})();
+</script>
