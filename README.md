@@ -7,6 +7,8 @@
 `php artisan serve` · `queue:work` · `horizon` · Redis stream listeners · `schedule:work` · `npm run dev`
 — across two, three or ten projects, in the right order, supervised, in one terminal.
 
+[github.com/vidux/laracrew](https://github.com/vidux/laracrew)
+
 </div>
 
 ---
@@ -109,7 +111,7 @@ laracrew init --examples
 ```
 
 > Not published to npm yet. Until it is, install from source:
-> `git clone <repo> && cd laracrew && npm install && npm run build && npm link`
+> `git clone https://github.com/vidux/laracrew && cd laracrew && npm install && npm run build && npm link`
 
 Requires **Node 20+**. Works on Windows, macOS and Linux. PHP is only needed for the projects
 laracrew runs, not for laracrew itself.
