@@ -155,6 +155,11 @@ laracrew doctor dual
 laracrew up dual
 ```
 
+**Prefer not to write YAML by hand?** Open [`docs/stack-builder.html`](docs/stack-builder.html) in
+a browser. Add your projects and the commands that run under them, and it writes the `stack.yaml`
+as you go — checking the same rules laracrew does, so a stack that looks right there boots. No
+install, no build step; it is one file.
+
 ---
 
 ## One command per project set
@@ -575,7 +580,7 @@ project, `LARACREW_PROJECT=<key>`.
 
 ## Status
 
-**v0.2.0 — supervisor and full-screen view are built and tested.**
+**v0.2.1 — supervisor and full-screen view are built and tested.**
 
 Working now: config pipeline, dependency-ordered boot with readiness gates, restart policies with
 exponential backoff, the graceful stop ladder — `stop.exec` for any process, `stop.artisan` as the
