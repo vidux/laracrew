@@ -1,0 +1,99 @@
+# A TypeScript API, a Vite frontend, a BullMQ worker and a database — no PHP anywhere.
+#
+# Demonstrates: logMatch readiness for tools that announce themselves, per-service env,
+#               a build step that must finish before anything else starts, argv-form
+#               commands so paths with spaces cannot mis-split.
+#
+# Setup: edit the paths, then
+#   cp -r node-api-and-web ~/.laracrew/stacks/
+#   laracrew up node-api-and-web
+name: node-api-and-web
+description: Node API + Vite web + BullMQ worker
+command: web
+
+projects:
+  api:
+    path: ~/code/shop/api
+    color: cyan
+  web:
+    path: ~/code/shop/web
+    color: magenta
+  shared:
+    path: ~/code/shop/packages/types
+    color: green
+
+defaults:
+  restart: on-failure
+  backoff: { initialMs: 1000, maxMs: 15000, factor: 2, maxRestarts: 10 }
+  stop: { graceMs: 5000 }
+
+services:
+  # Infrastructure this stack expects to already be running.
+  - name: postgres
+    external: true
+    ready: { tcp: "127.0.0.1:5432", timeoutMs: 10000 }
+
+  - name: redis
+    external: true
+    ready: { tcp: "127.0.0.1:6379", timeoutMs: 10000 }
+
+  # A one-shot build. `restart: never` means it is finished, not crashed, when it exits 0.
+  # Everything that imports the shared types waits for it.
+  - name: types:build
+    project: shared
+    cmd: ["npm", "run", "build"]
+    groups: [build]
+    restart: never
+    ready: { logMatch: "build (complete|succeeded)|Done in", timeoutMs: 120000 }
+
+  - name: api
+    project: api
+    cmd: ["npm", "run", "dev"] # e.g. tsx watch src/server.ts
+    groups: [backend]
+    needs: [postgres, redis, types:build]
+    env:
+      NODE_ENV: development
+      PORT: "3000"
+      # Pull a secret from your own shell rather than committing it.
+      STRIPE_KEY: ${env:STRIPE_TEST_KEY:sk_test_placeholder}
+    ready: { http: "http://127.0.0.1:3000/health", timeoutMs: 30000 }
+    url: http://127.0.0.1:3000
+
+  - name: api:worker
+    project: api
+    cmd: ["npm", "run", "worker"] # BullMQ / Bee-Queue consumer
+    groups: [backend, workers]
+    needs: [redis, types:build]
+    # Give an in-flight job a moment to settle before the process is taken down.
+    stop: { graceMs: 10000 }
+
+  - name: web
+    project: web
+    cmd: ["npm", "run", "dev"]
+    groups: [frontend]
+    needs: [api] # don't boot the UI against an API that isn't answering
+    env:
+      VITE_API_URL: http://127.0.0.1:3000
+    ready: { logMatch: "Local:\\s+http", timeoutMs: 30000 }
+    url: http://127.0.0.1:5173
+    stop: { graceMs: 3000 }
+
+  # Handy, but noisy — start it when you actually want it.
+  - name: web:test
+    project: web
+    cmd: ["npm", "run", "test:watch"]
+    groups: [tooling]
+    autostart: false
+    restart: never
+
+  - name: api:studio
+    project: api
+    cmd: ["npm", "run", "db:studio"] # Prisma Studio, Drizzle Studio, etc.
+    groups: [tooling]
+    needs: [postgres]
+    autostart: false
+    url: http://127.0.0.1:5555
+
+profiles:
+  backend-only: { only: [backend, postgres, redis, types:build] }
+  frontend-only: { only: [frontend, types:build] }

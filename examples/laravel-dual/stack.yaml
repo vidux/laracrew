@@ -1,0 +1,107 @@
+# Two interconnected Laravel apps: queues, Redis stream listeners, schedulers, Vite.
+#
+# Demonstrates: artisan-aware graceful stop, readiness gates that order the boot,
+#               autostart:false for commands you run occasionally, groups and profiles.
+#
+# Setup: edit the two paths below, then
+#   cp -r laravel-dual ~/.laracrew/stacks/
+#   laracrew doctor laravel-dual && laracrew up laravel-dual
+name: laravel-dual
+description: API + Portal with queues, streams and schedulers
+command: dual
+
+# Projects are declared inline here so the example is self-contained. Move them to
+# ~/.laracrew/projects.yaml and use `use: [api, portal]` once you have several stacks.
+projects:
+  api:
+    path: D:/work/api
+    php: php # or an absolute path to a specific build
+    envFile: .env # read for QUEUE_CONNECTION, REDIS_*, APP_URL
+    color: cyan
+  portal:
+    path: D:/work/portal
+    php: php
+    color: magenta
+
+defaults:
+  restart: on-failure
+  backoff: { initialMs: 2000, maxMs: 30000, factor: 2, maxRestarts: 10 }
+  # Workers finish the job they are holding before laracrew terminates them.
+  stop: { artisan: "queue:restart", graceMs: 15000 }
+
+services:
+  - name: redis
+    external: true # health-checked, never started or stopped by laracrew
+    ready: { tcp: "127.0.0.1:6379", timeoutMs: 10000 }
+
+  # ---------------------------------------------------------------- api
+  - name: api:serve
+    project: api
+    cmd: php artisan serve --port=${port:8000}
+    groups: [http]
+    needs: [redis]
+    ready: { http: "http://127.0.0.1:8000/up", timeoutMs: 20000 }
+    url: http://127.0.0.1:8000
+    stop: { graceMs: 5000 } # a web server has no job to finish
+
+  - name: api:queue
+    project: api
+    cmd:
+      ["php", "artisan", "queue:work", "redis", "--queue=high,default", "--tries=3", "--timeout=90"]
+    groups: [workers]
+    needs: [redis]
+    metrics: { queues: [high, default] }
+
+  - name: api:streams
+    project: api
+    cmd: ["php", "artisan", "redis-stream:run", "orders_sync"]
+    groups: [workers, streams]
+    needs: [redis]
+    metrics:
+      streams:
+        - { key: orders_sync, group: api-consumers }
+
+  - name: api:schedule
+    project: api
+    cmd: ["php", "artisan", "schedule:work"] # schedule:run is one tick; :work is the daemon
+    groups: [scheduler]
+    needs: [redis]
+
+  - name: api:vite
+    project: api
+    cmd: npm run dev
+    groups: [assets]
+    ready: { logMatch: "ready in|Local:", timeoutMs: 30000 }
+    stop: { graceMs: 3000 }
+
+  # ---------------------------------------------------------------- portal
+  # Nothing here starts until the API is actually answering HTTP.
+  - name: portal:serve
+    project: portal
+    cmd: php artisan serve --port=${port:8001}
+    groups: [http]
+    needs: [redis, api:serve]
+    ready: { http: "http://127.0.0.1:8001/up", timeoutMs: 20000 }
+    url: http://127.0.0.1:8001
+    stop: { graceMs: 5000 }
+
+  - name: portal:queue
+    project: portal
+    cmd: ["php", "artisan", "queue:work", "redis", "--tries=3"]
+    groups: [workers]
+    needs: [redis, api:serve]
+    metrics: { queues: [default] }
+
+  # Defined but not launched — select it and press `s` when you need a backfill.
+  - name: portal:backfill
+    project: portal
+    cmd: ["php", "artisan", "portal:backfill-orders"]
+    groups: [maintenance]
+    needs: [redis]
+    autostart: false
+    restart: never
+
+profiles:
+  light: { except: [assets] } # skip Vite when you are only touching the backend
+  workers-only: { only: [workers, redis] }
+  api-only: { except: [portal:serve, portal:queue, portal:backfill] }
