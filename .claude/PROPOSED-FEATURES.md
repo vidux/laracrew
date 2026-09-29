@@ -65,8 +65,8 @@ and interpolation; the Supervisor with dependency-ordered boot, readiness gates,
 restarts, rollback on a failed boot and the stop ladder (`stop.exec` / `stop.artisan`); the
 TUI (overview, per-process log, merged log, help); `--plain` and `--json`; file logs and
 `laracrew logs`; `init`, `ls`, `up`, `doctor`, `link` / `unlink`; the stack builder page. CI
-runs the tests and the tarball smoke test on Windows and Ubuntu and publishes to npm through
-trusted publishing.
+runs the tests and the tarball smoke test on Windows and Ubuntu on every push; a separate,
+manually triggered workflow re-runs that matrix and publishes to npm through trusted publishing.
 
 Several keys are accepted by the schema and do nothing yet, so stack files written today are
 already valid for the proposals that give them meaning:

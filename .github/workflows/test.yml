@@ -1,0 +1,54 @@
+# Typecheck, test, build and smoke-test the packed tarball on every push and PR, on both
+# platforms laracrew supports. publish.yml calls this workflow too, so a release never skips it.
+
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    # Job-level so it also applies when publish.yml calls this workflow. Superseded PR runs are
+    # cancelled; anything else queues.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.os }}-${{ matrix.node }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20, 22, 24]
+    steps:
+      # Actions are pinned to a commit, not a tag: a tag can be moved, a commit cannot. The
+      # comment carries the tag so Dependabot can keep the pin current.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      # Tests spawn real children and bind real ports (vitest.config.ts: fileParallelism false).
+      - run: npm test
+
+      - run: npm run build
+
+      # The check `npm test` cannot do: pack, install the tarball into an empty directory, run
+      # the installed binary, and assert no child process survived. See the prepare-for-publish
+      # skill for why (a shipped binary once reported the wrong version with a green suite).
+      - name: Smoke-test the packed tarball
+        shell: bash
+        run: bash .claude/skills/prepare-for-publish/smoke-test.sh

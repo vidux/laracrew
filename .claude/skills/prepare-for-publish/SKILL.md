@@ -103,12 +103,16 @@ Then stop. Print the commands and let the user run them:
 
 ```bash
 git add -A && git commit -m "0.2.0"
-git tag v0.2.0
-npm publish
+git push
 ```
 
+The publish itself runs on GitHub: Actions > publish > Run workflow, with **publish** ticked
+(unticked is a `--dry-run` rehearsal). That workflow re-runs the test matrix, checks the
+CHANGELOG entry and the npm registry, publishes with provenance through trusted publishing,
+and pushes the `v0.2.0` tag itself — so there is no `git tag` or `npm publish` to run by hand.
+
 Publishing is irreversible and outward-facing — never run `npm publish`, `git push`, or
-`npm version` on your own initiative.
+`npm version` on your own initiative, and never trigger the publish workflow.
 
 ## Smoke-testing on Windows (this is the dev machine)
 
