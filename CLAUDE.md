@@ -15,6 +15,7 @@ process tree: per-process status, uptime and restarts, with logs opened one proc
 | Doc | Contents |
 |---|---|
 | [.claude/PLAN.md](.claude/PLAN.md) | Vision, scope, milestones, acceptance criteria, risks |
+| [.claude/PROPOSED-FEATURES.md](.claude/PROPOSED-FEATURES.md) | Proposed features beyond v0.2.1: the case for each, how it would surface, what it would add |
 | [.claude/ARCHITECTURE.md](.claude/ARCHITECTURE.md) | Module layout, supervisor state machine, log pipeline, daemon IPC |
 | [.claude/CONFIG-SPEC.md](.claude/CONFIG-SPEC.md) | `~/.laracrew` layout, YAML schema, worked examples |
 | [.claude/TUI-UX.md](.claude/TUI-UX.md) | Screen mockups, keybindings, colour semantics, plain mode |

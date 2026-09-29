@@ -2,6 +2,7 @@
 
 > Status: **M0, M1 and M2 shipped** — see §7. Date: 2026-09-19.
 > Runtime decision: **Node.js + TypeScript + Ink** (locked in).
+> Features proposed but not yet scheduled into the milestones: [PROPOSED-FEATURES.md](PROPOSED-FEATURES.md).
 
 ## 1. The problem
 

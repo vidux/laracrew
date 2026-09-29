@@ -1,0 +1,156 @@
+# Test on every push and PR. Publish to npm either from the GitHub UI (Actions > publish >
+# Run workflow, tick "publish") or by pushing a `v*` tag.
+#
+# Manual run, "publish" unticked: full test matrix, then `npm publish --dry-run` — a rehearsal.
+# Manual run, "publish" ticked:   full test matrix, publish, then push the `v<version>` tag.
+# Tag push `v1.2.3`:              full test matrix, check the tag matches package.json, publish.
+#
+# Authentication is npm trusted publishing (OIDC): no token, no secret. On npmjs.com the
+# `laracrew` package must list this repo as a trusted publisher — provider GitHub Actions,
+# owner `vidux`, repository `laracrew`, workflow filename `publish.yml` (must match this file's
+# name exactly). If an environment name is set there too, add `environment: <name>` to the
+# publish job. The exchange needs `id-token: write` and npm CLI 11.5.1 or newer.
+
+name: publish
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to npm for real. Unticked = rehearsal with `npm publish --dry-run`.'
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a release mid-publish; superseded PR runs are fair game.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      # Tests spawn real children and bind real ports (vitest.config.ts: fileParallelism false).
+      - run: npm test
+
+      - run: npm run build
+
+      # The check `npm test` cannot do: pack, install the tarball into an empty directory, run
+      # the installed binary, and assert no child process survived. See the prepare-for-publish
+      # skill for why (a shipped binary once reported the wrong version with a green suite).
+      - name: Smoke-test the packed tarball
+        shell: bash
+        run: bash .claude/skills/prepare-for-publish/smoke-test.sh
+
+  publish:
+    name: ${{ github.event_name == 'workflow_dispatch' && !inputs.publish && 'rehearse publish (dry run)' || 'publish to npm' }}
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # push the release tag after a manual publish
+      id-token: write # --provenance signs the tarball against this workflow run
+    env:
+      # Real publish on a tag push, or a manual run with "publish" ticked. Everything else rehearses.
+      REAL: ${{ (startsWith(github.ref, 'refs/tags/v') || inputs.publish == true) && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      # Trusted publishing needs npm 11.5.1+; the npm bundled with Node may be older.
+      - run: npm install -g npm@latest
+
+      - run: npm ci
+
+      # Refuse to ship the wrong thing: a tag that disagrees with package.json, a version with
+      # no CHANGELOG entry (CHANGELOG.md ships inside the tarball), or a version npm already has.
+      - name: Check the release
+        id: release
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME#v}"
+            if [ "$TAG" != "$VERSION" ]; then
+              echo "::error::tag is v$TAG but package.json says $VERSION"
+              exit 1
+            fi
+          fi
+
+          if ! grep -q "^## \[$VERSION\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [$VERSION]' entry"
+            exit 1
+          fi
+
+          PUBLISHED="$(npm view "laracrew@$VERSION" version 2>/dev/null || true)"
+          if [ -n "$PUBLISHED" ]; then
+            if [ "$REAL" = "true" ]; then
+              echo "::error::laracrew $VERSION is already on npm — bump the version in package.json"
+              exit 1
+            fi
+            echo "::warning::laracrew $VERSION is already on npm; a real publish of this version would fail"
+          fi
+
+          if [ "$REAL" = "true" ]; then
+            echo "publishing laracrew $VERSION"
+          else
+            echo "rehearsing laracrew $VERSION (dry run)"
+          fi
+
+      # `npm publish` runs prepublishOnly (typecheck, test, build) itself — the same gate the
+      # release checklist requires — then packs from the `files` allowlist. Auth comes from the
+      # OIDC exchange with npmjs.com; nothing to pass here.
+      - name: Publish
+        run: npm publish --provenance --access public ${{ env.REAL != 'true' && '--dry-run' || '' }}
+
+      # A manual publish has no tag yet. Create it at the commit that was just released so the
+      # CHANGELOG's release links resolve. A push made with GITHUB_TOKEN does not trigger this
+      # workflow again, so this cannot publish twice. The tagger identity is the Actions bot's own
+      # noreply address (41898282 is its user id), so GitHub links the tag to that account.
+      - name: Tag the release
+        if: github.event_name == 'workflow_dispatch' && env.REAL == 'true'
+        shell: bash
+        run: |
+          TAG="v${{ steps.release.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists on origin; leaving it alone"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "laracrew ${{ steps.release.outputs.version }}"
+          git push origin "$TAG"
+          echo "pushed $TAG"
