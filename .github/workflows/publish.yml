@@ -90,6 +90,26 @@ jobs:
             echo "rehearsing laracrew $VERSION (dry run)"
           fi
 
+      # The token exchange npm performs internally, done up front. When npm's own exchange is
+      # refused it falls back to setup-node's placeholder token and the publish dies with a
+      # misleading 404, so surface the registry's real reason here before anything is built.
+      - name: Check trusted publishing
+        shell: bash
+        run: |
+          ID_TOKEN="$(curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" \
+            | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).value")"
+          STATUS="$(curl -sS -o exchange.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/json" \
+            "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/laracrew")"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::npm refused the trusted-publishing token exchange (HTTP $STATUS): $(cat exchange.json)"
+            rm -f exchange.json
+            exit 1
+          fi
+          rm -f exchange.json # holds a short-lived publish token; never print it
+          echo "trusted publishing: token exchange accepted for laracrew"
+
       # `npm publish` runs prepublishOnly (typecheck, test, build) itself — the same gate the
       # release checklist requires — then packs from the `files` allowlist. Auth comes from the
       # OIDC exchange with npmjs.com; nothing to pass here.
