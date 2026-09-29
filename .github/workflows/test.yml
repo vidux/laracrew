@@ -3,10 +3,29 @@
 
 name: test
 
+# Prose-only changes skip the matrix. `examples/README.md` is deliberately not in the list:
+# test/examples.test.ts reads it. The release workflows are skipped because they never run
+# from a push. The filters do not apply to `workflow_call`, so a release always runs the tests.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '*.md' # root docs only: README, CHANGELOG, CLAUDE, CONTRIBUTING, SECURITY
+      - '.claude/**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/workflows/publish.yml'
+      - '.github/workflows/publish-stage.yml'
   pull_request:
+    paths-ignore:
+      - '*.md'
+      - '.claude/**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/workflows/publish.yml'
+      - '.github/workflows/publish-stage.yml'
   workflow_call:
 
 permissions:
