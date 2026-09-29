@@ -109,7 +109,7 @@ export const runTui = async (
 
   const perform = (command: Command): void => {
     const stack = buildStackView(supervisor);
-    const row = stack.rows[command.type === 'none' || command.type === 'quit' || command.type === 'force-quit' ? ui.selected : command.index];
+    const row = stack.rows['index' in command ? command.index : ui.selected];
 
     switch (command.type) {
       case 'quit':
@@ -128,6 +128,20 @@ export const runTui = async (
         void supervisor
           .restart(row.name)
           .then(() => setNote(`${row.name} restarted`))
+          .catch((error: unknown) => setNote(`restart failed: ${error instanceof Error ? error.message : String(error)}`));
+        break;
+
+      case 'restart-running':
+        setNote('restarting every running process…');
+        void supervisor
+          .restartRunning()
+          .then((names) =>
+            setNote(
+              names.length === 0
+                ? 'nothing is running — nothing to restart'
+                : `restarted ${names.length} process${names.length === 1 ? '' : 'es'}: ${names.join(', ')}`,
+            ),
+          )
           .catch((error: unknown) => setNote(`restart failed: ${error instanceof Error ? error.message : String(error)}`));
         break;
 

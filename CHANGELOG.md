@@ -9,6 +9,14 @@ under **Changed** with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- **`R` restarts every running process** with one keypress, in dependency order, so a
+  dependency is back and ready before the services that need it are bounced. Only what is
+  `running` is touched: a service you stopped, one defined with `autostart: false`, one that
+  exited on its own and one that gave up all stay exactly as they are. Plain and JSON runs see
+  the usual stop and start events plus a notice naming the services.
+
 Planned, in order — see `.claude/PLAN.md`:
 
 - `laracrew scan` to discover Laravel projects and scaffold a stack

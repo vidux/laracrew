@@ -69,7 +69,9 @@ export class TempHome {
   }
 
   cleanup(): void {
-    rmSync(this.root, { recursive: true, force: true });
+    // Windows reports ENOTEMPTY while a just-closed or just-killed file is still delete-pending
+    // (or an AV scanner has it), so retry briefly instead of failing the test in teardown.
+    rmSync(this.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   }
 }
 

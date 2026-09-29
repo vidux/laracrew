@@ -16,6 +16,7 @@ export type Command =
   | { type: 'quit' }
   | { type: 'force-quit' }
   | { type: 'restart'; index: number }
+  | { type: 'restart-running' }
   | { type: 'toggle'; index: number };
 
 export interface KeyResult {
@@ -64,6 +65,8 @@ export const handleKey = (ui: UiState, key: Key, rowCount: number): KeyResult =>
       return { ui, command: { type: 'toggle', index: ui.selected } };
 
     case 'r':
+      // Shift-R bounces every running process; plain r only the selected one.
+      if (key.shift) return { ui, command: { type: 'restart-running' } };
       return { ui, command: { type: 'restart', index: ui.selected } };
 
     case 'a':

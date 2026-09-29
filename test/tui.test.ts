@@ -252,6 +252,15 @@ describe('help and shutdown screens', () => {
     expect(out).toContain('never streams logs');
   });
 
+  test('the legend and the help both advertise R for restarting every running process', () => {
+    expect(text(renderFrame(input()))).toContain('R restart all running');
+    expect(text(renderFrame(input({ ui: { ...initialUiState(), view: 'log', phase: 'running' } })))).toContain(
+      'R restart all running',
+    );
+    const help: UiState = { ...initialUiState(), view: 'help', phase: 'running' };
+    expect(text(renderFrame(input({ ui: help })))).toContain('restart every running process');
+  });
+
   test('shutdown lists each service as it stops', () => {
     const rows = [row(0, 'api:serve', 'stopping'), row(1, 'api:queue', 'stopped')];
     const ui: UiState = { ...initialUiState(), phase: 'stopping' };
@@ -306,6 +315,19 @@ describe('key handling', () => {
 
   test('r asks for a restart of the selected process', () => {
     expect(handleKey(base({ selected: 2 }), key('r'), 4).command).toEqual({ type: 'restart', index: 2 });
+  });
+
+  test('R asks for a restart of every running process, whichever view is open', () => {
+    const shiftR = key('r', { shift: true });
+    expect(handleKey(base({ selected: 2 }), shiftR, 4).command).toEqual({ type: 'restart-running' });
+    expect(handleKey(base({ view: 'log' }), shiftR, 4).command).toEqual({ type: 'restart-running' });
+    expect(handleKey(base({ view: 'merged' }), shiftR, 4).command).toEqual({ type: 'restart-running' });
+    // The view itself is untouched — no scroll reset, no navigation.
+    expect(handleKey(base({ view: 'log', scrollBack: 7, follow: false }), shiftR, 4).ui).toMatchObject({
+      view: 'log',
+      scrollBack: 7,
+      follow: false,
+    });
   });
 
   test('a toggles the merged log view', () => {

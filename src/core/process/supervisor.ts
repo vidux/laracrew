@@ -185,6 +185,52 @@ export class Supervisor {
     await process.restart();
   }
 
+  /**
+   * Restarts every service that is `running` right now and nothing else: a stopped or idle
+   * service stays where it is, a failed one is not resurrected, one still starting is left to
+   * finish. Dependency order, parallel within a level, so a dependency is back and ready
+   * before the services that need it are bounced. Returns the names restarted, in that order.
+   */
+  async restartRunning(): Promise<string[]> {
+    const isTarget = (process: ManagedProcess): boolean => !process.service.external && process.state === 'running';
+    const wanted = new Set(this.processes.filter(isTarget).map((process) => process.service.name));
+    if (wanted.size === 0) return [];
+
+    this.#bus.emit({
+      type: 'notice',
+      level: 'info',
+      message: `restarting ${wanted.size} running service${wanted.size === 1 ? '' : 's'}: ${[...wanted].join(', ')}`,
+      at: Date.now(),
+    });
+
+    const restarted = new Set<string>();
+    for (const level of this.stack.levels) {
+      await Promise.all(
+        level
+          .filter((name) => wanted.has(name))
+          .map(async (name) => {
+            const process = this.#processes.get(name)!;
+            // It was running when the key was pressed; if it died or was stopped since, leave it.
+            if (!isTarget(process)) return;
+            try {
+              await process.restart();
+              restarted.add(name);
+            } catch (error) {
+              this.#bus.emit({
+                type: 'notice',
+                level: 'error',
+                service: name,
+                message: `restart failed: ${error instanceof Error ? error.message : String(error)}`,
+                at: Date.now(),
+              });
+            }
+          }),
+      );
+    }
+
+    return this.stack.levels.flat().filter((name) => restarted.has(name));
+  }
+
   async stopService(name: string): Promise<void> {
     await this.#requireProcess(name).stop();
   }

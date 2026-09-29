@@ -310,6 +310,7 @@ the stack with a message naming both services rather than hanging.
 | `esc` | Back to the tree |
 | `a` | Merged log across every service - the firehose, on demand |
 | `r` | Restart the selected process (graceful: `queue:restart` first) |
+| `R` | Restart every running process, in dependency order. Stopped, idle and failed ones stay as they are |
 | `s` | Stop it, or start it again if stopped |
 | `f` / `g` / `G` | Follow-pause tailing; jump to top or bottom |
 | `?` | Help |
@@ -620,7 +621,7 @@ The full plan lives in [.claude/PLAN.md](.claude/PLAN.md), with the design in
 npm install
 npm run dev -- up example     # tsx, no build step
 npm run build                 # tsup -> dist/index.js
-npm test                      # vitest, 244 tests
+npm test                      # vitest, 248 tests
 npm run typecheck
 npm link                      # put `laracrew` on PATH while hacking on it
 ```

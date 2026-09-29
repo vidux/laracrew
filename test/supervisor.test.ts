@@ -470,4 +470,83 @@ services:
   });
 });
 
+describe('Supervisor.restartRunning', () => {
+  test('restarts only what is running, in dependency order, and leaves everything else alone', async () => {
+    const { supervisor: sup, recorder } = await start(`
+name: t
+defaults: { restart: never }
+services:
+  - { name: a, cmd: ${fake(['--name', 'a', '--interval', '30'])} }
+  - { name: b, cmd: ${fake(['--name', 'b', '--interval', '30'])}, needs: [a] }
+  - { name: idle, cmd: ${fake(['--name', 'idle', '--interval', '30'])}, autostart: false }
+  - { name: halted, cmd: ${fake(['--name', 'halted', '--interval', '30'])} }
+  - { name: finished, cmd: ${fake(['--name', 'finished', '--exit', '0', '--after', '20'])} }
+  - { name: broken, cmd: ${fake(['--name', 'broken', '--exit', '1', '--after', '20'])} }
+`);
+
+    // One of each thing that must not be touched: stopped by hand, exited cleanly, gave up.
+    await sup.stopService('halted');
+    await waitUntil(() => supervisorState(sup, 'finished') === 'stopped', { label: 'finished to exit' });
+    await waitUntil(() => supervisorState(sup, 'broken') === 'failed', { label: 'broken to fail' });
+
+    const lastPid = (name: string): number =>
+      recorder.ofType('service:spawned').filter((event) => event.service === name).at(-1)!.pid;
+    const oldA = lastPid('a');
+    const oldB = lastPid('b');
+    const spawnsBefore = recorder.ofType('service:spawned').length;
+
+    const restarted = await sup.restartRunning();
+
+    expect(restarted).toEqual(['a', 'b']);
+    expect(supervisorState(sup, 'a')).toBe('running');
+    expect(supervisorState(sup, 'b')).toBe('running');
+    expect(sup.get('a')!.pid).not.toBe(oldA);
+    expect(sup.get('b')!.pid).not.toBe(oldB);
+    expect(sup.get('a')!.restarts).toBe(1);
+    expect(sup.get('b')!.restarts).toBe(1);
+    await waitUntil(() => !isAlive(oldA) && !isAlive(oldB), { label: 'the old processes to exit' });
+
+    expect(supervisorState(sup, 'idle')).toBe('queued');
+    expect(supervisorState(sup, 'halted')).toBe('stopped');
+    expect(supervisorState(sup, 'finished')).toBe('stopped');
+    expect(supervisorState(sup, 'broken')).toBe('failed');
+    const spawnedSince = recorder.ofType('service:spawned').slice(spawnsBefore).map((event) => event.service);
+    expect(spawnedSince).toEqual(['a', 'b']);
+
+    // a is back up before b goes down: dependency order, not a free-for-all.
+    const states = recorder.ofType('service:state');
+    const indexOf = (service: string, to: string, from = 0): number =>
+      states.findIndex((event, index) => index >= from && event.service === service && event.to === to);
+    const aStopping = indexOf('a', 'stopping');
+    const aRunningAgain = indexOf('a', 'running', aStopping);
+    const bStopping = indexOf('b', 'stopping');
+    expect(aStopping).toBeGreaterThanOrEqual(0);
+    expect(aRunningAgain).toBeGreaterThan(aStopping);
+    expect(bStopping).toBeGreaterThan(aRunningAgain);
+
+    // Plain and JSON renderers get told what happened.
+    const notices = recorder.ofType('notice').map((event) => event.message);
+    expect(notices.some((message) => message.includes('restarting 2 running services: a, b'))).toBe(true);
+  });
+
+  test('does nothing when nothing is running', async () => {
+    const { supervisor: sup, recorder } = await start(`
+name: t
+defaults: { restart: never }
+services:
+  - { name: idle, cmd: ${fake(['--name', 'idle', '--interval', '30'])}, autostart: false }
+  - { name: a, cmd: ${fake(['--name', 'a', '--interval', '30'])} }
+`);
+
+    await sup.stopService('a');
+    const spawnsBefore = recorder.ofType('service:spawned').length;
+
+    expect(await sup.restartRunning()).toEqual([]);
+
+    expect(recorder.ofType('service:spawned')).toHaveLength(spawnsBefore);
+    expect(supervisorState(sup, 'idle')).toBe('queued');
+    expect(supervisorState(sup, 'a')).toBe('stopped');
+  });
+});
+
 const supervisorState = (sup: Supervisor, name: string): string => sup.get(name)!.state;

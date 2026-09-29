@@ -125,6 +125,7 @@ old `--plain` firehose, but on demand rather than by default.
 | `esc` / `s` | Back to the overview (`s` is stop/start on the overview) |
 | `a` | Merged log across every service |
 | `r` | Restart the selected process (graceful) |
+| `R` | Restart every running process, in dependency order. Stopped, idle and failed ones are left alone |
 | `t` | Toggle: stop if running, start if stopped |
 | `f` | Follow / pause tailing |
 | `g` / `G` | Top / bottom of a log |

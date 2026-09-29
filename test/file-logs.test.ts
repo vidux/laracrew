@@ -77,12 +77,15 @@ describe('line format', () => {
 });
 
 describe('FileSink', () => {
-  test('appends lines and strips colour so grep works', () => {
+  // Every sink is closed before its test ends: an open descriptor keeps the unlinked file in
+  // its directory on Windows, and teardown then cannot remove the temp home (ENOTEMPTY).
+  test('appends lines and strips colour so grep works', async () => {
     const file = path.join(home.root, 'logs', 'a.log');
     const sink = new FileSink(file, { maxBytes: 1_000_000, keep: 1 });
 
     sink.write(entry(`[32mProcessed[39m job`));
     sink.write(entry('second line'));
+    await sink.close();
 
     const contents = readFileSync(file, 'utf8');
     expect(contents).toContain('Processed job');
@@ -90,11 +93,12 @@ describe('FileSink', () => {
     expect(contents.trim().split('\n')).toHaveLength(2);
   });
 
-  test('rotates once the file passes maxBytes and keeps the old one', () => {
+  test('rotates once the file passes maxBytes and keeps the old one', async () => {
     const file = path.join(home.root, 'logs', 'rot.log');
     const sink = new FileSink(file, { maxBytes: 400, keep: 1 });
 
     for (let index = 0; index < 40; index += 1) sink.write(entry(`line ${index}`));
+    await sink.close();
 
     expect(existsSync(file)).toBe(true);
     expect(existsSync(`${file}.1`)).toBe(true);
@@ -102,11 +106,12 @@ describe('FileSink', () => {
     expect(readFileSync(file, 'utf8')).toContain('line 39');
   });
 
-  test('keeps only `keep` rotated files', () => {
+  test('keeps only `keep` rotated files', async () => {
     const file = path.join(home.root, 'logs', 'keep.log');
     const sink = new FileSink(file, { maxBytes: 200, keep: 1 });
 
     for (let index = 0; index < 200; index += 1) sink.write(entry(`line ${index}`));
+    await sink.close();
 
     expect(existsSync(`${file}.1`)).toBe(true);
     expect(existsSync(`${file}.2`)).toBe(false);
