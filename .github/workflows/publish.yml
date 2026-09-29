@@ -12,9 +12,9 @@
 # Until npm accepts GitHub's immutable OIDC subject claims — this repository was created after
 # 2026-07-15, so its tokens carry `repo:vidux@<id>/laracrew@<id>:…` and the exchange answers
 # "package not found" (https://github.com/npm/cli/issues/9969) — this workflow stops at
-# "Check trusted publishing". Release with publish-token.yml in the meantime. A rehearsal run
+# "Check trusted publishing". Release with publish-stage.yml in the meantime. A rehearsal run
 # of this file is the cheapest way to find out whether npm has fixed it; once it passes, delete
-# publish-token.yml and its NPM_TOKEN secret.
+# publish-stage.yml and its NPM_TOKEN secret.
 
 name: publish
 
@@ -27,7 +27,7 @@ on:
         default: false
 
 concurrency:
-  group: release-${{ github.ref }} # shared with publish-token.yml: one release at a time
+  group: release-${{ github.ref }} # shared with publish-stage.yml: one release at a time
   cancel-in-progress: false # never cancel a release mid-publish
 
 permissions:
@@ -110,7 +110,7 @@ jobs:
             -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/json" \
             "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/laracrew")"
           if [ "$STATUS" != "200" ]; then
-            echo "::error::npm refused the trusted-publishing token exchange (HTTP $STATUS): $(cat exchange.json) — while npm/cli#9969 is open, release with the 'publish (token)' workflow instead"
+            echo "::error::npm refused the trusted-publishing token exchange (HTTP $STATUS): $(cat exchange.json) — while npm/cli#9969 is open, release with the 'publish (stage)' workflow instead"
             rm -f exchange.json
             exit 1
           fi

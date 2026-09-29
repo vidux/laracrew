@@ -106,15 +106,18 @@ git add -A && git commit -m "0.2.0"
 git push
 ```
 
-The publish itself runs on GitHub, from one of two twin workflows, with **publish** ticked
-(unticked is a `--dry-run` rehearsal). Either re-runs the test matrix, checks the CHANGELOG
-entry and the npm registry, publishes with provenance, and pushes the `v0.2.0` tag itself — so
-there is no `git tag` or `npm publish` to run by hand.
+The release itself runs on GitHub, from one of two twin workflows (unticked, either is a
+`--dry-run` rehearsal). Both re-run the test matrix, check the CHANGELOG entry and the npm
+registry, sign provenance, and push the `v0.2.0` tag themselves — so there is no `git tag` or
+`npm publish` to run by hand.
 
-- **publish (token)** — `publish-token.yml`, authenticated with the NPM_TOKEN secret. Use this
-  while npm/cli#9969 keeps trusted publishing from accepting this repository's OIDC tokens.
-- **publish** — `publish.yml`, trusted publishing, no secret. Rehearse it now and then; once it
-  gets past "Check trusted publishing", release with it and delete the token twin and secret.
+- **publish (stage)** — `publish-stage.yml`, `npm stage publish` with the NPM_TOKEN secret (a
+  granular token, no 2FA bypass needed). Nothing goes live: the user approves the staged version
+  with 2FA on npmjs.com (Staged Packages tab). Use this while npm/cli#9969 keeps trusted
+  publishing from accepting this repository's OIDC tokens.
+- **publish** — `publish.yml`, trusted publishing, direct `npm publish`, no secret. Rehearse it
+  now and then; once it gets past "Check trusted publishing", release with it and delete the
+  stage twin and the secret.
 
 Publishing is irreversible and outward-facing — never run `npm publish`, `git push`, or
 `npm version` on your own initiative, and never trigger the publish workflow.

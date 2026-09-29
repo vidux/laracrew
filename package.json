@@ -26,7 +26,7 @@
     "node": ">=20"
   },
   "bin": {
-    "laracrew": "./dist/index.js"
+    "laracrew": "dist/index.js"
   },
   "exports": {
     ".": "./dist/index.js",

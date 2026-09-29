@@ -66,9 +66,9 @@ restarts, rollback on a failed boot and the stop ladder (`stop.exec` / `stop.art
 TUI (overview, per-process log, merged log, help); `--plain` and `--json`; file logs and
 `laracrew logs`; `init`, `ls`, `up`, `doctor`, `link` / `unlink`; the stack builder page. CI
 runs the tests and the tarball smoke test on Windows and Ubuntu on every push; two manually
-triggered twins re-run that matrix and publish to npm — `publish.yml` through trusted
-publishing, `publish-token.yml` with a token while npm/cli#9969 keeps the OIDC exchange from
-accepting this repository.
+triggered twins re-run that matrix and release to npm — `publish.yml` publishes through trusted
+publishing; `publish-stage.yml` stages with a token for a 2FA approval on npmjs.com, while
+npm/cli#9969 keeps the OIDC exchange from accepting this repository.
 
 Several keys are accepted by the schema and do nothing yet, so stack files written today are
 already valid for the proposals that give them meaning:
