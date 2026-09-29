@@ -6,9 +6,11 @@ import { runInit } from '../src/cli/commands/init.js';
 import { declaredPorts, runDoctor } from '../src/cli/commands/doctor.js';
 import { prepareStack } from '../src/cli/commands/up.js';
 import { fileURLToPath } from 'node:url';
-import { VERSION, resolveStackName } from '../src/cli/program.js';
+import { VERSION, buildProgram, resolveStackName } from '../src/cli/program.js';
 import { attachPlainRenderer } from '../src/cli/render/plain.js';
-import { createPainter, stripAnsi, supportsColor } from '../src/cli/render/colors.js';
+import { createColor, createPainter, stripAnsi, supportsColor } from '../src/cli/render/colors.js';
+import { marks } from '../src/cli/render/marks.js';
+import { glyphs } from '../src/tui/theme.js';
 import { EventEmitter } from 'node:events';
 import { EventBus } from '../src/core/events/bus.js';
 import {
@@ -399,6 +401,7 @@ describe('plain renderer', () => {
         out += text;
       },
       painter: createPainter(false),
+      glyph: glyphs({ LARACREW_ASCII: '1' } as NodeJS.ProcessEnv),
       now: () => new Date(2026, 0, 1, 14, 22, 1),
     });
     for (const event of events) bus.emit(event);
@@ -433,6 +436,13 @@ describe('plain renderer', () => {
     expect(out).toContain('laracrew');
     expect(out).toContain('ready in 1.5s');
   });
+
+  test('tells a clean exit from a crash', () => {
+    const exit = (code: number) =>
+      render([{ type: 'service:exit', service: 'api:queue', code, signal: null, intentional: false, at: 0 }]);
+    expect(exit(0)).toContain('! exited (code 0)');
+    expect(exit(1)).toContain('X exited (code 1)');
+  });
 });
 
 describe('colors', () => {
@@ -450,6 +460,30 @@ describe('colors', () => {
 
   test('stripAnsi undoes an enabled painter', () => {
     expect(stripAnsi(createPainter(true)('red', 'boom'))).toBe('boom');
+  });
+
+  test('FORCE_COLOR=0 turns it off, even on a TTY', () => {
+    expect(supportsColor({ isTTY: true }, { FORCE_COLOR: '0' } as NodeJS.ProcessEnv)).toBe(false);
+  });
+
+  test('the chalk instance follows the same on/off decision', () => {
+    expect(createColor(false).bold.cyan('plain')).toBe('plain');
+    expect(createColor(true).bold.cyan('styled')).not.toBe('styled');
+    expect(stripAnsi(createColor(true).bold.cyan('styled'))).toBe('styled');
+  });
+
+  test('marks fall back to ASCII where the TUI does', () => {
+    expect(stripAnsi(marks({ LARACREW_ASCII: '1' } as NodeJS.ProcessEnv).ok)).toBe('v');
+    expect(stripAnsi(marks({} as NodeJS.ProcessEnv).ok)).toBe('\u2714');
+  });
+});
+
+describe('help', () => {
+  test('lists every command, whether or not the help is coloured', () => {
+    const help = stripAnsi(buildProgram().helpInformation());
+    for (const name of ['init', 'ls', 'up', 'logs', 'link', 'unlink', 'doctor']) {
+      expect(help).toMatch(new RegExp(`^  ${name}\\b`, 'm'));
+    }
   });
 });
 

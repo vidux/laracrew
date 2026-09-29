@@ -161,15 +161,23 @@ CI matrix: windows-latest + ubuntu-latest, Node 20 and 22.
 
 ## 9. Dependencies (keep this list short)
 
-**Shipped today (M0–M1):** `commander`, `yaml`, `zod`. That is the whole runtime dependency list.
+**Shipped today:** `commander`, `yaml`, `zod`, `chalk`. That is the whole runtime dependency list.
 
-Three planned dependencies were dropped once written, and should stay dropped:
+Two planned dependencies were dropped once written, and should stay dropped:
 
 | Dropped | Replaced by | Why |
 |---|---|---|
 | `execa` | `node:child_process` + `core/process/spawn.ts` | We need only two spawn shapes, and the Windows `.cmd` shim handling is explicit either way |
 | `tree-kill` | `core/process/stop.ts` | Nine lines: `taskkill /T /F` on Windows, process-group kill on POSIX. Owning it keeps the stop ladder readable |
-| `picocolors` | `cli/render/colors.ts` | 40 lines including `NO_COLOR` / `FORCE_COLOR` handling and `stripAnsi` |
+
+`chalk` went the other way. The hand-rolled painter it replaced knew the 16 basic colours and
+nothing else; the polished console wanted bold-plus-colour chains and a styled help screen, and
+`chalk` 5 gives both for 44 KB with no dependencies and about 4 ms on a cold start (measured:
+`laracrew --version` 102 → 106 ms). What stays ours is the decision: `cli/render/colors.ts` reads
+`NO_COLOR`, `FORCE_COLOR` and the TTY — chalk itself never reads `NO_COLOR` — and hands chalk a
+level. Nothing else imports the package. `chalk` 6 needs Node 22, so the pin stays on 5 while
+Node 20 is supported. The status marks every command shares (`✔ ✖ ▲ · ▸ →`, ASCII under
+`LARACREW_ASCII=1`) live in `cli/render/marks.ts` on top of the TUI's glyph table.
 
 **Still to add, per milestone:** `ink` + `react` (M2), `chokidar` (M4), `pidusage` and `ioredis`
 (M3, both lazily loaded so the tool works with Redis down).

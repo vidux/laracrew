@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { ConfigError } from '../../core/config/errors.js';
 import { listStacks, loadStack } from '../../core/config/load.js';
 import { paths } from '../../core/config/paths.js';
-import { paint } from '../render/colors.js';
+import { color } from '../render/colors.js';
+import { marks } from '../render/marks.js';
 
 const IS_WINDOWS = process.platform === 'win32';
 
@@ -282,31 +283,35 @@ export const linkCommand = (
     );
   }
 
+  const mark = marks(env);
+
   if (results.length === 0) {
-    console.log(paint('yellow', 'nothing to link — add `command: <name>` to the stacks you want a command for'));
+    console.log(
+      `${mark.warn} ${color.yellow('nothing to link — add `command: <name>` to the stacks you want a command for')}`,
+    );
     return 0;
   }
 
   for (const result of results) {
     const verb = result.replaced ? 'updated' : 'created';
     console.log(
-      `${paint('green', verb)} ${paint('bold', result.name)} ${paint('gray', `-> laracrew up ${result.stack}`)}`,
+      `${mark.ok} ${color.green(verb)} ${color.bold(result.name)} ${mark.arrow} ${color.gray(`laracrew up ${result.stack}`)}`,
     );
   }
 
   const first = results[0]!;
-  console.log(paint('gray', `\nin ${first.dir}`));
+  console.log(`\n${color.gray(`in ${first.dir}`)}`);
 
   if (!first.onPath) {
     console.log(
-      `\n${paint('yellow', 'that directory is not on your PATH.')} Add it once:\n` +
+      `\n${mark.warn} ${color.yellow('that directory is not on your PATH.')} Add it once:\n` +
         (IS_WINDOWS
-          ? `  ${paint('cyan', `setx PATH "%PATH%;${first.dir}"`)}   ${paint('gray', '(then reopen the terminal)')}`
-          : `  ${paint('cyan', `echo 'export PATH="$PATH:${first.dir}"' >> ~/.bashrc`)}`),
+          ? `  ${color.cyan(`setx PATH "%PATH%;${first.dir}"`)}   ${color.gray('(then reopen the terminal)')}`
+          : `  ${color.cyan(`echo 'export PATH="$PATH:${first.dir}"' >> ~/.bashrc`)}`),
     );
   } else {
-    console.log(`\nRun it from anywhere:  ${paint('cyan', first.name)}`);
-    console.log(paint('gray', `Flags pass straight through:  ${first.name} --only workers`));
+    console.log(`\nRun it from anywhere:  ${color.cyan.bold(first.name)}`);
+    console.log(color.gray(`Flags pass straight through:  ${first.name} --only workers`));
   }
 
   return 0;
@@ -314,6 +319,7 @@ export const linkCommand = (
 
 export const unlinkCommandAction = (name: string, env: NodeJS.ProcessEnv = process.env): number => {
   const removed = unlinkCommandName(name, { env });
-  for (const file of removed) console.log(`${paint('red', 'removed')} ${file}`);
+  const mark = marks(env);
+  for (const file of removed) console.log(`${mark.ok} removed ${color.gray(file)}`);
   return 0;
 };

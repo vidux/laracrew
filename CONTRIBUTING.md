@@ -17,6 +17,10 @@ npm link                      # puts `laracrew` on your PATH, pointing at your w
 After `npm link`, run `npm run build` whenever you want the global `laracrew` to pick up your
 changes — the shim runs `dist/index.js`, not the TypeScript source.
 
+Set `LARACREW_HOME` to a scratch directory before you experiment, so nothing you try lands in
+your real `~/.laracrew`. The README's *Try it without installing from npm* section has the
+five-step version, including how to test the packed tarball.
+
 ## The four rules
 
 These are not style preferences; breaking them breaks a feature.
@@ -42,11 +46,13 @@ orphans them and leaves the port bound. Never call `child.kill()` directly.
 
 ## Dependencies
 
-Runtime dependencies are `commander`, `yaml` and `zod`. That is the whole list, and adding to it
-needs a justification in the PR.
+Runtime dependencies are `commander`, `yaml`, `zod` and `chalk`. That is the whole list, and
+adding to it needs a justification in the PR.
 
-`execa`, `tree-kill`, `picocolors` and `ink` were each installed, used, and removed in favour of
-about sixty lines we own — see [.claude/ARCHITECTURE.md](.claude/ARCHITECTURE.md) §9. Startup
+`execa`, `tree-kill` and `ink` were each installed, used, and removed in favour of a few dozen
+lines we own — see [.claude/ARCHITECTURE.md](.claude/ARCHITECTURE.md) §9. `chalk` earned its
+place: 44 KB, no dependencies, a few milliseconds at startup, and `cli/render/colors.ts` still
+owns the `NO_COLOR` / `FORCE_COLOR` decision — nothing imports the package directly. Startup
 time is a feature for a tool you run twenty times a day; the budget is **cold `laracrew
 --version` under 150 ms**.
 

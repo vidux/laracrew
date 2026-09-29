@@ -3,13 +3,15 @@ import { listStacks, listTasks, loadSharedProjects, loadStack } from '../../core
 import { paths } from '../../core/config/paths.js';
 import { ConfigError } from '../../core/config/errors.js';
 import { listLinks } from './link.js';
-import { padEnd, paint } from '../render/colors.js';
+import { color, padEnd } from '../render/colors.js';
+import { marks } from '../render/marks.js';
 
 export const lsCommand = (env: NodeJS.ProcessEnv = process.env, json = false): number => {
   const home = paths(env);
+  const mark = marks(env);
 
   if (!existsSync(home.root)) {
-    console.error(`${paint('yellow', 'no laracrew home yet')} — run ${paint('cyan', 'laracrew init')}`);
+    console.error(`${mark.warn} ${color.yellow('no laracrew home yet')} — run ${color.cyan('laracrew init')}`);
     return 1;
   }
 
@@ -47,39 +49,43 @@ export const lsCommand = (env: NodeJS.ProcessEnv = process.env, json = false): n
     return 0;
   }
 
-  console.log(paint('gray', home.root));
+  const heading = (label: string, count: number): string => `\n${color.bold(label)} ${color.gray(`(${count})`)}`;
 
-  console.log(`\n${paint('bold', 'STACKS')}`);
-  if (stacks.length === 0) console.log(paint('gray', '  none'));
+  console.log(`${color.bold('laracrew')} ${color.gray(home.root)}`);
+
+  console.log(heading('STACKS', stacks.length));
+  if (stacks.length === 0) {
+    console.log(color.gray('  none — run `laracrew init --examples`, or write stacks/<name>/stack.yaml'));
+  }
   const width = Math.max(4, ...stacks.map((stack) => stack.name.length));
+  const indent = ' '.repeat(width + 4);
   for (const stack of stacks) {
-    const label = stack.valid ? paint('cyan', padEnd(stack.name, width)) : paint('red', padEnd(stack.name, width));
-    const meta = stack.valid ? paint('gray', `${stack.services} services`) : paint('red', 'invalid');
-    console.log(`  ${label}  ${meta}  ${paint('gray', stack.description)}`);
-    if (stack.command) {
-      console.log(`  ${' '.repeat(width)}  ${paint('green', `$ ${stack.command}`)} ${paint('gray', '(global command)')}`);
+    if (stack.valid) {
+      const meta = padEnd(`${stack.services} service${stack.services === 1 ? '' : 's'}`, 11);
+      console.log(`  ${color.cyan.bold(padEnd(stack.name, width))}  ${color.gray(meta)}  ${stack.description}`.trimEnd());
+    } else {
+      console.log(
+        `${mark.fail} ${color.red.bold(padEnd(stack.name, width))}  ${color.red(padEnd('invalid', 11))}  ${color.red(stack.description)}`,
+      );
     }
-    if (stack.profiles.length > 0) {
-      console.log(`  ${' '.repeat(width)}  ${paint('gray', `profiles: ${stack.profiles.join(', ')}`)}`);
-    }
+    if (stack.command) console.log(`${indent}${color.green(`$ ${stack.command}`)} ${color.gray('global command')}`);
+    if (stack.profiles.length > 0) console.log(`${indent}${color.gray(`profiles: ${stack.profiles.join(', ')}`)}`);
   }
 
-  console.log(`\n${paint('bold', 'PROJECTS')}`);
   const projectKeys = Object.keys(projects);
-  if (projectKeys.length === 0) console.log(paint('gray', '  none — add them to projects.yaml'));
+  console.log(heading('PROJECTS', projectKeys.length));
+  if (projectKeys.length === 0) console.log(color.gray('  none — add them to projects.yaml'));
   const projectWidth = Math.max(4, ...projectKeys.map((key) => key.length));
   for (const [key, project] of Object.entries(projects)) {
     const exists = existsSync(project.path);
-    console.log(
-      `  ${paint('magenta', padEnd(key, projectWidth))}  ${project.path} ${
-        exists ? '' : paint('red', '(missing)')
-      }`,
-    );
+    const lead = exists ? '  ' : `${mark.fail} `;
+    const where = exists ? project.path : color.red(`${project.path} (missing)`);
+    console.log(`${lead}${color.magenta.bold(padEnd(key, projectWidth))}  ${where}`);
   }
 
-  console.log(`\n${paint('bold', 'TASKS')}`);
-  if (taskNames.length === 0) console.log(paint('gray', '  none'));
-  for (const task of taskNames) console.log(`  ${paint('green', task)}`);
+  console.log(heading('TASKS', taskNames.length));
+  if (taskNames.length === 0) console.log(color.gray('  none'));
+  for (const task of taskNames) console.log(`  ${color.green(task)}`);
 
   console.log('');
   return 0;

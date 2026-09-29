@@ -172,7 +172,7 @@ laracrew link dual
 ```
 
 ```
-created dual -> laracrew up dual
+✔ created dual → laracrew up dual
 
 in C:\Users\you\AppData\Roaming\npm
 
@@ -499,6 +499,8 @@ laracrew up dual --json | jq 'select(.type=="service:exit")'
 ### What `doctor` checks
 
 ```
+doctor · dual
+
 ✔ stack "dual" is valid — 8 services
 ✔ php: PHP 8.3.11 (cli)
 ✖ api and portal share Redis 127.0.0.1:6379/0# AND queue(s): default
@@ -507,6 +509,8 @@ laracrew up dual --json | jq 'select(.type=="service:exit")'
   jobs run inline on dispatch, so the worker will sit idle forever — set it to redis or database
 ✖ port 8000 is already in use
 ▲ redis not reachable at 127.0.0.1:6380
+
+✖ 3 problems, 1 warning
 ```
 
 Exit code is 1 when anything is at `✖`, so it drops straight into a pre-flight script.
@@ -519,11 +523,15 @@ commands say it talks to Redis. Run `doctor` on a Django or Node stack and you g
 that apply to it, not a wall of PHP complaints:
 
 ```
+doctor · django-celery
+
 ✔ stack "django-celery" is valid — 8 services
 ✔ port 8000 is free
 ✔ postgres is reachable — tcp 127.0.0.1:5432
 ▲ redis is not reachable — tcp 127.0.0.1:6379 (ECONNREFUSED)
   laracrew never starts an external service; anything that needs it will wait at its gate
+
+✔ no blocking problems, 1 warning
 ```
 
 Services marked `external: true` are checked through the gate they already declare, so whatever
@@ -621,15 +629,15 @@ The full plan lives in [.claude/PLAN.md](.claude/PLAN.md), with the design in
 npm install
 npm run dev -- up example     # tsx, no build step
 npm run build                 # tsup -> dist/index.js
-npm test                      # vitest, 248 tests
+npm test                      # vitest, 253 tests
 npm run typecheck
 npm link                      # put `laracrew` on PATH while hacking on it
 ```
 
-Runtime dependencies, in total: `commander`, `yaml`, `zod`. Process spawning, tree-killing and
-colour are hand-rolled — see [ARCHITECTURE.md §9](.claude/ARCHITECTURE.md) for why `execa`,
-`tree-kill` and `picocolors` were dropped. Startup time is a feature for a tool you run twenty
-times a day.
+Runtime dependencies, in total: `commander`, `yaml`, `zod` and `chalk`. Process spawning and
+tree-killing are hand-rolled — see [ARCHITECTURE.md §9](.claude/ARCHITECTURE.md) for why `execa`
+and `tree-kill` were dropped, and what `chalk` costs. Startup time is a feature for a tool you run
+twenty times a day.
 
 The test suite spawns real child processes, binds real ports and asserts that no pid survives a
 shutdown — including a deliberately spawned grandchild and a process that ignores `SIGTERM`. Every
@@ -638,6 +646,51 @@ test runs against a throwaway `LARACREW_HOME`.
 Architectural rule worth knowing before you contribute: **nothing in `src/core/` may import from
 `src/cli/`**. Core emits typed events; the plain renderer, the JSON renderer and the coming TUI are
 all just subscribers. That's what keeps `--plain`, `--detach` and the tests honest.
+
+### Try it without installing from npm
+
+Five steps from a fresh clone to a running stack, without touching your real `~/.laracrew`:
+
+1. **Clone and install.**
+
+   ```bash
+   git clone https://github.com/vidux/laracrew.git && cd laracrew && npm install
+   ```
+
+2. **Point it at a throwaway home.** Everything below reads and writes there, not your real config.
+
+   ```bash
+   export LARACREW_HOME=/tmp/laracrew-try            # PowerShell: $env:LARACREW_HOME = "$env:TEMP\laracrew-try"
+   ```
+
+3. **Run from source.** `npm run dev` runs `src/index.ts` through `tsx` — no build step, every edit is live.
+
+   ```bash
+   npm run dev -- init --examples
+   npm run dev -- doctor example
+   npm run dev -- up example                          # the full-screen view; q quits
+   npm run dev -- up example --plain                  # what a pipe or CI sees
+   ```
+
+4. **Run the real binary.** `laracrew link` needs the build, and this is what users get.
+
+   ```bash
+   npm run build && npm link                          # `laracrew` on your PATH -> this checkout's dist/
+   laracrew up example
+   npm unlink -g laracrew                             # when you are done
+   ```
+
+   Rebuild after each change: the link runs `dist/index.js`, not the TypeScript.
+
+5. **Test the exact tarball npm would publish.** The smoke test packs it, installs it into an empty
+   directory, runs the installed binary and checks that no child process survived:
+
+   ```bash
+   bash .claude/skills/prepare-for-publish/smoke-test.sh
+   ```
+
+   By hand: `npm pack`, then in an empty directory `npm install ../laracrew/laracrew-<version>.tgz`
+   and `npx laracrew --version`.
 
 ## License
 

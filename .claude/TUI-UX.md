@@ -26,7 +26,7 @@ Everything else follows from that:
 Plain ANSI on `node:readline`, about 150 lines in [`terminal.ts`](../src/tui/terminal.ts).
 Ink + React was installed, evaluated and removed: a React reconciler and ~100 packages to
 repaint a fixed list of ten rows twice a second is the wrong trade for this project, which
-already hand-rolls process spawning and colour for the same reason.
+already hand-rolls process spawning for the same reason.
 
 What we actually need, and what the terminal gives us natively:
 

@@ -9,6 +9,20 @@ under **Changed** with a migration note.
 
 ## [Unreleased]
 
+### Changed
+
+- **The console got a polish.** Every command now shares one vocabulary of marks — `✔` done,
+  `✖` failed, `▲` worth a look, `▸` a next step — with ASCII stand-ins under `LARACREW_ASCII=1`
+  or `TERM=dumb`. `ls` counts and aligns its sections, `doctor` names the stack it checked and
+  ends with a one-line verdict, `init` and `link` report what they did as a checklist, config
+  errors separate the file, the message and the hints, and `--help` is coloured. `up --plain`
+  tells a clean exit (`▲ exited (code 0)`) from a crash (`✖ exited (code 1)`).
+- Colour comes from `chalk` 5 (44 KB, no dependencies) instead of the hand-rolled painter. The
+  decision stays laracrew's own: `NO_COLOR`, `FORCE_COLOR` and the TTY check behave as before,
+  and `FORCE_COLOR=0` now means off, as it does everywhere else.
+- `commander` 12 → 14 for the help styling hooks. One visible side effect: an extra positional
+  argument (`laracrew up dual extra`) is now an error instead of being ignored.
+
 Planned, in order — see `.claude/PLAN.md`:
 
 - `laracrew scan` to discover Laravel projects and scaffold a stack

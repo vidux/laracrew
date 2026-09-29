@@ -5,7 +5,8 @@ import { Command } from 'commander';
 import { ConfigError } from '../core/config/errors.js';
 import { listStacks } from '../core/config/load.js';
 import { loadGlobalConfig } from '../core/config/load.js';
-import { paint } from './render/colors.js';
+import { color } from './render/colors.js';
+import { marks } from './render/marks.js';
 import { doctorCommand } from './commands/doctor.js';
 import { initCommand } from './commands/init.js';
 import { linkCommand, unlinkCommandAction } from './commands/link.js';
@@ -69,7 +70,21 @@ export const buildProgram = (): Command => {
     .name('laracrew')
     .description('Boot and supervise all the long-running processes of your projects with one command.')
     .version(VERSION, '-v, --version')
-    .showHelpAfterError();
+    .showHelpAfterError()
+    .configureHelp({
+      styleTitle: (text) => color.bold(text),
+      styleCommandText: (text) => color.cyan(text),
+      styleSubcommandText: (text) => color.cyan(text),
+      styleOptionText: (text) => color.green(text),
+      styleArgumentText: (text) => color.yellow(text),
+    })
+    .configureOutput({
+      // One colour decision for the whole program — ours, so NO_COLOR is honoured here too.
+      getOutHasColors: () => color.level > 0,
+      getErrHasColors: () => color.level > 0,
+      outputError: (message, write) => write(`${marks().fail} ${color.red(message.trimEnd())}
+`),
+    });
 
   program
     .command('init')
@@ -169,12 +184,21 @@ export const buildProgram = (): Command => {
   return program;
 };
 
+/** `ConfigError.format()` with the parts told apart by colour: heading, file, message, hints. */
+const renderConfigError = (error: ConfigError): string => {
+  const lines = [`${marks().fail} ${color.red.bold('config error')}`];
+  if (error.file) lines.push(`  ${color.gray(error.file)}`);
+  lines.push(`  ${error.message}`);
+  for (const detail of error.details) lines.push(`    ${color.gray('-')} ${detail}`);
+  return lines.join('\n');
+};
+
 export const run = async (argv: string[] = process.argv): Promise<void> => {
   try {
     await buildProgram().parseAsync(argv);
   } catch (error) {
     if (error instanceof ConfigError) {
-      console.error(`${paint('red', 'config error')}\n${error.format()}`);
+      console.error(renderConfigError(error));
       process.exitCode = 1;
       return;
     }

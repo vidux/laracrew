@@ -23,9 +23,12 @@ process tree: per-process status, uptime and restarts, with logs opened one proc
 ## Stack
 
 - Node **>= 20**, TypeScript (ESM, `NodeNext`), strict mode
-- Runtime dependencies, all of them: `commander`, `yaml`, `zod`
+- Runtime dependencies, all of them: `commander`, `yaml`, `zod`, `chalk`
 - Process spawning and tree-killing are hand-rolled on `node:child_process` — see
-  [.claude/ARCHITECTURE.md](.claude/ARCHITECTURE.md) §9 for why `execa`/`tree-kill`/`picocolors` were dropped
+  [.claude/ARCHITECTURE.md](.claude/ARCHITECTURE.md) §9 for why `execa`/`tree-kill` were dropped
+- Colour goes through `cli/render/colors.ts` (`color`) and the status marks through
+  `cli/render/marks.ts` — never import `chalk` directly; that module owns the `NO_COLOR` /
+  `FORCE_COLOR` decision
 - `tsup` (build), `tsx` (dev), `vitest` (tests)
 - The TUI is plain ANSI on `node:readline` — no Ink, no React (see .claude/TUI-UX.md §1)
 - Coming per milestone: `ioredis` (M3, lazy), `chokidar` (M4)

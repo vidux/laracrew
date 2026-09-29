@@ -5,7 +5,9 @@ import { paths } from '../../core/config/paths.js';
 import { fileNamesFor } from '../../core/logs/file-sink.js';
 import { followFile, parseSince, tailFile, toEntries } from '../../core/logs/read.js';
 import type { LogLine } from '../../core/events/types.js';
-import { asColorName, padEnd, paint } from '../render/colors.js';
+import { color, padEnd } from '../render/colors.js';
+import { marks } from '../render/marks.js';
+import { glyphs } from '../../tui/theme.js';
 import { write as safeWrite } from '../render/output.js';
 import { prepareStack } from './up.js';
 
@@ -49,9 +51,9 @@ const formatEntry = (entry: LogLine, width: number, withName: boolean): string =
     .map((part) => String(part).padStart(2, '0'))
     .join(':');
 
-  const who = withName ? `${paint(asColorName(undefined), padEnd(entry.service, width))} ` : '';
-  const body = entry.stream === 'stderr' ? paint('red', entry.line) : entry.line;
-  return `${paint('gray', clock)} ${who}${paint('gray', '|')} ${body}\n`;
+  const who = withName ? `${color.cyan(padEnd(entry.service, width))} ` : '';
+  const body = entry.stream === 'stderr' ? color.red(entry.line) : entry.line;
+  return `${color.gray(clock)} ${who}${color.gray('|')} ${body}\n`;
 };
 
 export const logsCommand = async (service: string | undefined, options: LogsOptions = {}): Promise<number> => {
@@ -62,26 +64,26 @@ export const logsCommand = async (service: string | undefined, options: LogsOpti
   const dir = logDirFor(stackName, env);
   const available = targetsFor(stackName, env);
 
+  const mark = marks(env);
+
   if (options.list) {
     if (available.length === 0) {
-      console.log(paint('yellow', `no log files yet in ${dir}`));
-      console.log(paint('gray', 'they appear once the stack has run at least once'));
+      console.log(`${mark.warn} ${color.yellow(`no log files yet in ${dir}`)}`);
+      console.log(`  ${color.gray('they appear once the stack has run at least once')}`);
       return 0;
     }
-    console.log(paint('gray', dir));
+    console.log(`${color.bold('logs')} ${color.gray(glyphs(env).dot)} ${color.cyan.bold(stackName)}`);
+    console.log(`  ${color.gray(dir)}`);
     for (const target of available) {
-      console.log(`  ${paint('cyan', target.service)}  ${paint('gray', path.basename(target.file))}`);
+      console.log(`  ${color.cyan(target.service)}  ${color.gray(path.basename(target.file))}`);
     }
     return 0;
   }
 
   if (available.length === 0) {
-    console.error(paint('yellow', `no log files in ${dir}`));
+    console.error(`${mark.warn} ${color.yellow(`no log files in ${dir}`)}`);
     console.error(
-      paint(
-        'gray',
-        'run the stack at least once, and check `defaults.logs.toFile` is not set to false',
-      ),
+      `  ${color.gray('run the stack at least once, and check `defaults.logs.toFile` is not set to false')}`,
     );
     return 1;
   }

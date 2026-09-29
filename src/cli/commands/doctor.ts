@@ -4,7 +4,9 @@ import { ConfigError } from '../../core/config/errors.js';
 import type { ResolvedProject, ResolvedService, ResolvedStack } from '../../core/config/resolve.js';
 import { describeProbe, httpProbe, isPortFree, tcpProbe } from '../../core/health/probes.js';
 import { runOnce } from '../../core/process/spawn.js';
-import { paint } from '../render/colors.js';
+import { color } from '../render/colors.js';
+import { marks } from '../render/marks.js';
+import { glyphs } from '../../tui/theme.js';
 import { prepareStack } from './up.js';
 
 export interface Finding {
@@ -410,19 +412,26 @@ export const runDoctor = async (stackName: string, env: NodeJS.ProcessEnv = proc
 
 export const doctorCommand = async (stackName: string, env: NodeJS.ProcessEnv = process.env): Promise<number> => {
   const findings = await runDoctor(stackName, env);
+  const mark = marks(env);
 
-  const glyph = { ok: paint('green', '✔'), warn: paint('yellow', '▲'), error: paint('red', '✖') };
+  console.log(`${color.bold('doctor')} ${color.gray(glyphs(env).dot)} ${color.cyan.bold(stackName)}\n`);
+
+  const lead = { ok: mark.ok, warn: mark.warn, error: mark.fail };
+  const tone = { ok: (text: string) => text, warn: color.yellow, error: color.red };
   for (const finding of findings) {
-    console.log(`${glyph[finding.level]} ${finding.message}`);
-    if (finding.hint) console.log(`  ${paint('gray', finding.hint)}`);
+    console.log(`${lead[finding.level]} ${tone[finding.level](finding.message)}`);
+    if (finding.hint) console.log(`  ${color.gray(finding.hint)}`);
   }
 
   const errors = findings.filter((finding) => finding.level === 'error').length;
   const warnings = findings.filter((finding) => finding.level === 'warn').length;
+  const count = (n: number, noun: string): string => `${n} ${noun}${n === 1 ? '' : 's'}`;
+  const tail = warnings > 0 ? color.yellow(`, ${count(warnings, 'warning')}`) : '';
 
   console.log(
-    `\n${errors === 0 ? paint('green', 'no blocking problems') : paint('red', `${errors} problem(s)`)}` +
-      (warnings > 0 ? paint('yellow', `, ${warnings} warning(s)`) : ''),
+    errors === 0
+      ? `\n${mark.ok} ${color.green.bold('no blocking problems')}${tail}`
+      : `\n${mark.fail} ${color.red.bold(count(errors, 'problem'))}${tail}`,
   );
 
   return errors > 0 ? 1 : 0;

@@ -23,6 +23,8 @@ export interface Glyphs {
   rule: string;
   dot: string;
   tick: string;
+  warn: string;
+  arrow: string;
 }
 
 const UNICODE: Glyphs = {
@@ -40,6 +42,8 @@ const UNICODE: Glyphs = {
   rule: '─',
   dot: '·',
   tick: '✔',
+  warn: '▲',
+  arrow: '→',
 };
 
 const ASCII: Glyphs = {
@@ -57,6 +61,8 @@ const ASCII: Glyphs = {
   rule: '-',
   dot: '.',
   tick: 'v',
+  warn: '!',
+  arrow: '->',
 };
 
 export const glyphs = (env: NodeJS.ProcessEnv = process.env): Glyphs => (asciiOnly(env) ? ASCII : UNICODE);

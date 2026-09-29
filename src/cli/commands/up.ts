@@ -3,7 +3,8 @@ import { loadSharedProjects, loadStack } from '../../core/config/load.js';
 import { resolveStack, type ResolvedStack } from '../../core/config/resolve.js';
 import { Supervisor } from '../../core/process/supervisor.js';
 import { attachPlainRenderer } from '../render/plain.js';
-import { paint } from '../render/colors.js';
+import { color } from '../render/colors.js';
+import { marks } from '../render/marks.js';
 import { onOutputClosed, write as safeWrite } from '../render/output.js';
 import { runTui } from '../../tui/app.js';
 
@@ -45,6 +46,7 @@ export const shouldUseTui = (options: UpOptions, stdout: { isTTY?: boolean } = p
 export const upCommand = async (name: string, options: UpOptions = {}): Promise<number> => {
   const stack = prepareStack(name, options);
   const bus = new EventBus();
+  const mark = marks(options.env);
 
   if (shouldUseTui(options)) {
     const supervisor = new Supervisor(stack, bus, options.env ? { env: options.env } : {});
@@ -67,7 +69,7 @@ export const upCommand = async (name: string, options: UpOptions = {}): Promise<
   const onSignal = (signal: NodeJS.Signals) => {
     if (stopping) {
       // Second interrupt: the user is done being patient.
-      console.error(paint('red', '\nforced exit — some children may survive'));
+      console.error(`\n${mark.fail} ${color.red.bold('forced exit — some children may survive')}`);
       process.exit(130);
     }
     void shutdown(`received ${signal}`);
@@ -85,7 +87,7 @@ export const upCommand = async (name: string, options: UpOptions = {}): Promise<
     await supervisor.up();
     await waitUntilIdle(supervisor, () => stopping);
   } catch (error) {
-    console.error(paint('red', error instanceof Error ? error.message : String(error)));
+    console.error(`${mark.fail} ${color.red(error instanceof Error ? error.message : String(error))}`);
     exitCode = 1;
   } finally {
     await shutdown('done');
