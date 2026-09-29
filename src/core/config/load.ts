@@ -93,6 +93,9 @@ const mergeServiceFragments = (document: unknown, dir: string): unknown => {
   return { ...document, services: [...existing, ...extra] };
 };
 
+/** A stack document from anywhere — a draft, a fragment under test — checked like a real one. */
+export const validateStack = (document: unknown, file: string): StackConfig => validate(stackSchema, document, file);
+
 export interface LoadedStack {
   config: StackConfig;
   file: string;

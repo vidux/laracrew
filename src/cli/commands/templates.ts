@@ -191,6 +191,7 @@ secrets in it.
 Start here:
 
     laracrew init --examples   # add a demo stack and a two-project template
+    laracrew draft <name>      # build a stack in a project folder, one command at a time
     laracrew ls                # what is defined
     laracrew doctor <stack>    # check a stack before booting it
     laracrew link <stack>      # give a stack its own global command

@@ -1,8 +1,8 @@
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { paths } from '../../core/config/paths.js';
-import { color, padEnd } from '../render/colors.js';
-import { marks } from '../render/marks.js';
+import { color } from '../render/colors.js';
+import { marks, nextSteps } from '../render/marks.js';
 import {
   CONFIG_YAML,
   EXAMPLE_STACK_YAML,
@@ -72,25 +72,18 @@ export const initCommand = (options: InitOptions = {}, env: NodeJS.ProcessEnv = 
     console.log(`  ${mark.skip} ${color.gray(`${path.relative(result.root, file)} (kept)`)}`);
   }
 
-  // One command per line, its purpose beside it; a continuation line lines up under the purpose.
-  const step = (command: string, why: string): string => `  ${mark.hint} ${color.cyan(padEnd(command, 25))}  ${why}`;
-  const more = (why: string): string => `${' '.repeat(31)}${why}`;
-
-  if (result.examples) {
-    console.log(`
-${color.bold('Next')}
-${step('laracrew up example', 'run the demo stack — proves it works, no Laravel needed')}
-${step('laracrew link example', 'install it as a global command you can type from anywhere')}
-${step('laracrew doctor dual', `check the real stack once ${color.gray(path.join(result.root, 'projects.yaml'))}`)}
-${more(`has your project paths, then ${color.cyan('laracrew up dual')}`)}
-`);
-    return;
-  }
-
-  console.log(`
-${color.bold('Next')}
-${step('laracrew init --examples', 'add a runnable demo stack and a two-project template,')}
-${more(`or write your own at ${color.gray(path.join(result.root, 'stacks', '<name>', 'stack.yaml'))}`)}
-${step('laracrew up <name>', `boot it — ${color.cyan('laracrew ls')} shows what is defined`)}
-`);
+  const steps: [string, string][] = result.examples
+    ? [
+        ['laracrew up example', 'run the demo stack — proves it works, no Laravel needed'],
+        ['laracrew link example', 'install it as a global command you can type from anywhere'],
+        ['laracrew doctor dual', `check the real stack once ${color.gray(path.join(result.root, 'projects.yaml'))}`],
+        ['', `has your project paths, then ${color.cyan('laracrew up dual')}`],
+      ]
+    : [
+        ['laracrew init --examples', 'add a runnable demo stack and a two-project template,'],
+        ['', `or write your own at ${color.gray(path.join(result.root, 'stacks', '<name>', 'stack.yaml'))}`],
+        ['laracrew draft <name>', 'or build one in a project folder, one command at a time'],
+        ['laracrew up <name>', `boot it — ${color.cyan('laracrew ls')} shows what is defined`],
+      ];
+  console.log(`\n${nextSteps(steps, env)}\n`);
 };

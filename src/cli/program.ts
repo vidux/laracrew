@@ -8,6 +8,7 @@ import { loadGlobalConfig } from '../core/config/load.js';
 import { color } from './render/colors.js';
 import { marks } from './render/marks.js';
 import { doctorCommand } from './commands/doctor.js';
+import { draftAddCommand, draftCommand, draftPublishCommand } from './commands/draft.js';
 import { initCommand } from './commands/init.js';
 import { linkCommand, unlinkCommandAction } from './commands/link.js';
 import { logsCommand } from './commands/logs.js';
@@ -92,6 +93,45 @@ export const buildProgram = (): Command => {
     .option('--examples', 'also write a runnable demo stack and a two-project template')
     .action((options: { examples?: boolean }) => {
       initCommand({ examples: options.examples ?? false });
+    });
+
+  const draft = program
+    .command('draft')
+    .description('build a stack step by step in the current folder, then publish it')
+    .argument('[name]', 'start a draft with this stack name, or show it if it exists; omit to show the only draft here')
+    .option('--force', 'start over when a draft of that name already exists here')
+    .action((name: string | undefined, options: { force?: boolean }) => {
+      process.exitCode = draftCommand(name, options);
+    });
+
+  draft
+    .command('add')
+    .description('append a service to the draft in this folder')
+    .requiredOption('--command, --cmd <line>', 'what to run, e.g. "php artisan queue:work"')
+    .option('--project <key>', 'the project it runs in — any short key, e.g. api')
+    .option('--path <dir>', "the project's folder, or where the command runs when there is no --project; defaults to this folder")
+    .option('--name <service>', 'service name (default: project + command, e.g. api:queue:work)')
+    .option('--default-state <state>', '"running" (default) or "stopped": defined, but idle until you start it')
+    .option('--draft <name>', 'which draft, when this folder holds several')
+    .action((options: Record<string, unknown>) => {
+      process.exitCode = draftAddCommand({
+        command: (options.command ?? options.cmd) as string,
+        project: options.project as string | undefined,
+        path: options.path as string | undefined,
+        name: options.name as string | undefined,
+        state: options.defaultState as string | undefined,
+        draft: options.draft as string | undefined,
+      });
+    });
+
+  draft
+    .command('publish')
+    .description('validate the draft and install it as a stack in ~/.laracrew')
+    .option('--force', 'replace a stack of the same name')
+    .option('--link', 'also install the global command, as `laracrew link` would')
+    .option('--draft <name>', 'which draft, when this folder holds several')
+    .action((options: { force?: boolean; link?: boolean; draft?: string }) => {
+      process.exitCode = draftPublishCommand(options);
     });
 
   program

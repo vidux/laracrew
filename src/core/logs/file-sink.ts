@@ -1,6 +1,6 @@
 import { closeSync, existsSync, mkdirSync, openSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
 import path from 'node:path';
-import { stripAnsi } from '../../cli/render/colors.js';
+import { stripAnsi } from './sanitize.js';
 import type { EventBus } from '../events/bus.js';
 import type { LogLine } from '../events/types.js';
 

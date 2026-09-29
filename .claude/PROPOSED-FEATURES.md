@@ -105,8 +105,9 @@ the last three is declined.
 
 ### L1 · `laracrew scan` — find Laravel projects, write a stack
 
-**Problem.** The first stack is written by hand from a template, and the template does not
-know which of your projects run Horizon, which have Vite, or which ports they use.
+**Problem.** The first stack is written by hand from a template or built one command at a time
+with `laracrew draft`; neither knows which of your projects run Horizon, which have Vite, or
+which ports they use.
 
 **Proposal.**
 

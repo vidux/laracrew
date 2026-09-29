@@ -9,6 +9,18 @@ under **Changed** with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- **`laracrew draft`: build a stack without writing YAML.** `laracrew draft dual` starts
+  `dual.laracrew.yaml` in the current folder. `laracrew draft add --project api --path D:/work/api
+  --command "php artisan queue:work"` appends a service; the project's path is remembered after
+  its first mention and defaults to the current folder. `--default-state stopped` defines a
+  service that stays idle until you press `s`. `laracrew draft` shows the draft (so does `laracrew draft <name>` once it exists), and
+  `laracrew draft publish` validates it with the real schema and installs it under
+  `~/.laracrew/stacks/`, with `--link` to also install the global command. Service names are
+  derived from the project and the command (`api:queue:work`); `--name` overrides. The draft
+  is a plain stack file that can be edited by hand and committed next to the code.
+
 ### Changed
 
 - **The console got a polish.** Every command now shares one vocabulary of marks — `✔` done,

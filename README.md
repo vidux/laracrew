@@ -160,6 +160,23 @@ a browser. Add your projects and the commands that run under them, and it writes
 as you go — checking the same rules laracrew does, so a stack that looks right there boots. No
 install, no build step; it is one file.
 
+**Or build it from the command line**, one service at a time, from inside the project:
+
+```bash
+cd D:/work/api
+laracrew draft dual                                                      # starts ./dual.laracrew.yaml
+laracrew draft add --project api --command "php artisan queue:work"      # --path defaults to this folder
+laracrew draft add --project api --command "php artisan schedule:work"   # the path is remembered
+laracrew draft add --project portal --path D:/work/portal --command "php artisan queue:work"
+laracrew draft add --project portal --command "npm run dev" --default-state stopped   # idle until you press s
+laracrew draft publish                                                   # validates it, installs ~/.laracrew/stacks/dual
+```
+
+`laracrew draft` on its own shows what the draft holds. Service names come from the project and
+the command (`api:queue:work`, `portal:dev`); `--name` overrides. The draft is a plain
+`stack.yaml`: edit it by hand, keep it next to the code, commit it. `publish` checks it with the
+same rules as any other stack, and `--link` also installs the global command (`dual`).
+
 ---
 
 ## One command per project set
@@ -467,6 +484,9 @@ profiles:
 
 ```bash
 laracrew init [--examples]         # create ~/.laracrew; --examples adds a demo stack + template
+laracrew draft [name]              # start a stack draft in this folder, or show it
+laracrew draft add --command "…" [--project key] [--path dir] [--name svc] [--default-state stopped]
+laracrew draft publish [--force] [--link]   # validate the draft and install it under ~/.laracrew
 laracrew ls [--json]               # list stacks, projects and tasks
 laracrew doctor [stack]            # check a stack before booting it
 laracrew up [stack] [options]      # boot the fleet and supervise it
@@ -629,7 +649,7 @@ The full plan lives in [.claude/PLAN.md](.claude/PLAN.md), with the design in
 npm install
 npm run dev -- up example     # tsx, no build step
 npm run build                 # tsup -> dist/index.js
-npm test                      # vitest, 253 tests
+npm test                      # vitest, 281 tests
 npm run typecheck
 npm link                      # put `laracrew` on PATH while hacking on it
 ```

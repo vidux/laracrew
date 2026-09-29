@@ -19,6 +19,11 @@ const OSC = new RegExp(ESC + '\\][^' + BEL + ESC + ']*(?:' + BEL + '|' + ESC + '
 /** Single-character escapes that have no business mid-line. */
 const SINGLE = new RegExp(ESC + '[=>78MD]', 'g');
 
+/** Colour (SGR) sequences only — what laracrew itself adds, and what a log file should not keep. */
+const SGR = new RegExp(ESC + '\\[[0-9;]*m', 'g');
+
+export const stripAnsi = (text: string): string => text.replace(SGR, '');
+
 const TAB = 9;
 const ESC_CODE = 27;
 

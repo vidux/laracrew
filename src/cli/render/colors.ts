@@ -7,6 +7,7 @@
  */
 
 import { Chalk, supportsColor as chalkDetected, type ChalkInstance } from 'chalk';
+import { stripAnsi } from '../../core/logs/sanitize.js';
 
 const NAMES = [
   'reset',
@@ -61,8 +62,7 @@ export const paint: Painter = createPainter(supportsColor());
 export const asColorName = (value: string | undefined): ColorName =>
   value && (NAMES as readonly string[]).includes(value) ? (value as ColorName) : 'cyan';
 
-/** Visible width, ignoring the ANSI we may have added. */
-export const stripAnsi = (text: string): string => text.replace(/\x1b\[[0-9;]*m/g, '');
+export { stripAnsi };
 
 export const padEnd = (text: string, width: number): string => {
   const visible = stripAnsi(text).length;
