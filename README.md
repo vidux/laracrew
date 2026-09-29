@@ -609,7 +609,7 @@ project, `LARACREW_PROJECT=<key>`.
 
 ## Status
 
-**v0.2.2 — supervisor and full-screen view are built and tested.**
+**v0.3.0 — supervisor, full-screen view and `laracrew draft` are built and tested.**
 
 Working now: config pipeline, dependency-ordered boot with readiness gates, restart policies with
 exponential backoff, the graceful stop ladder — `stop.exec` for any process, `stop.artisan` as the

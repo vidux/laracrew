@@ -9,6 +9,16 @@ under **Changed** with a migration note.
 
 ## [Unreleased]
 
+Planned, in order — see `.claude/PLAN.md`:
+
+- `laracrew scan` to discover Laravel projects and scaffold a stack
+- Live queue depth and Redis stream consumer lag in the process tree
+- File watching with graceful `queue:restart`
+- `laracrew run <task>` for one-shot cross-project sequences
+- Background daemon: `up --detach`, `attach`, `status`, `logs -f`
+
+## [0.3.0] — 2026-09-30
+
 ### Added
 
 - **`laracrew draft`: build a stack without writing YAML.** `laracrew draft dual` starts
@@ -34,14 +44,6 @@ under **Changed** with a migration note.
   and `FORCE_COLOR=0` now means off, as it does everywhere else.
 - `commander` 12 → 14 for the help styling hooks. One visible side effect: an extra positional
   argument (`laracrew up dual extra`) is now an error instead of being ignored.
-
-Planned, in order — see `.claude/PLAN.md`:
-
-- `laracrew scan` to discover Laravel projects and scaffold a stack
-- Live queue depth and Redis stream consumer lag in the process tree
-- File watching with graceful `queue:restart`
-- `laracrew run <task>` for one-shot cross-project sequences
-- Background daemon: `up --detach`, `attach`, `status`, `logs -f`
 
 ## [0.2.2] — 2026-09-30
 
@@ -224,7 +226,8 @@ once, from one command.
 - Accepted by the schema but not yet acted on: `watch`, `metrics` (read by `doctor` only), and
   `hooks`. Stack files written today stay valid.
 
-[Unreleased]: https://github.com/vidux/laracrew/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/vidux/laracrew/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/vidux/laracrew/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/vidux/laracrew/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/vidux/laracrew/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/vidux/laracrew/compare/v0.1.2...v0.2.0
