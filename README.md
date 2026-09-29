@@ -581,13 +581,13 @@ project, `LARACREW_PROJECT=<key>`.
 
 ## Status
 
-**v0.2.1 — supervisor and full-screen view are built and tested.**
+**v0.2.2 — supervisor and full-screen view are built and tested.**
 
 Working now: config pipeline, dependency-ordered boot with readiness gates, restart policies with
 exponential backoff, the graceful stop ladder — `stop.exec` for any process, `stop.artisan` as the
-Laravel shorthand — the full-screen process tree with per-process log inspection, logs persisted to
-disk with `laracrew logs` to read them back, plain and JSON renderers, per-stack global commands
-(`link` / `unlink`), `doctor`, `init`, `ls`.
+Laravel shorthand — the full-screen process tree with per-process log inspection and a one-key
+restart of everything running, logs persisted to disk with `laracrew logs` to read them back,
+plain and JSON renderers, per-stack global commands (`link` / `unlink`), `doctor`, `init`, `ls`.
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 

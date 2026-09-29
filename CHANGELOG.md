@@ -9,6 +9,16 @@ under **Changed** with a migration note.
 
 ## [Unreleased]
 
+Planned, in order — see `.claude/PLAN.md`:
+
+- `laracrew scan` to discover Laravel projects and scaffold a stack
+- Live queue depth and Redis stream consumer lag in the process tree
+- File watching with graceful `queue:restart`
+- `laracrew run <task>` for one-shot cross-project sequences
+- Background daemon: `up --detach`, `attach`, `status`, `logs -f`
+
+## [0.2.2] — 2026-09-30
+
 ### Added
 
 - **`R` restarts every running process** with one keypress, in dependency order, so a
@@ -17,13 +27,13 @@ under **Changed** with a migration note.
   exited on its own and one that gave up all stay exactly as they are. Plain and JSON runs see
   the usual stop and start events plus a notice naming the services.
 
-Planned, in order — see `.claude/PLAN.md`:
+### Notes
 
-- `laracrew scan` to discover Laravel projects and scaffold a stack
-- Live queue depth and Redis stream consumer lag in the process tree
-- File watching with graceful `queue:restart`
-- `laracrew run <task>` for one-shot cross-project sequences
-- Background daemon: `up --detach`, `attach`, `status`, `logs -f`
+- Releases are now built and published by GitHub Actions. `test.yml` runs the suite and the
+  packed-tarball smoke test on Windows and Ubuntu for every push and pull request; `publish.yml`
+  is a manual release through npm trusted publishing, with a dry-run rehearsal as the default.
+- Three tests left a log file handle open, which made the suite's teardown fail on Windows with
+  Node 20. Fixed; 248 tests.
 
 ## [0.2.1] — 2026-09-20
 
@@ -188,7 +198,8 @@ once, from one command.
 - Accepted by the schema but not yet acted on: `watch`, `metrics` (read by `doctor` only), and
   `hooks`. Stack files written today stay valid.
 
-[Unreleased]: https://github.com/vidux/laracrew/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/vidux/laracrew/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/vidux/laracrew/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/vidux/laracrew/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/vidux/laracrew/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/vidux/laracrew/compare/v0.1.1...v0.1.2
