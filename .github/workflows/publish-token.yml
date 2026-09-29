@@ -1,22 +1,23 @@
-# Publish laracrew to npm through trusted publishing (OIDC). Manual only:
-# Actions > publish > Run workflow.
+# Publish laracrew to npm with a granular access token. Manual only:
+# Actions > publish (token) > Run workflow.
+#
+# The stopgap twin of publish.yml: the same test gate, release checks and tag push, but
+# authenticated with the NPM_TOKEN secret instead of trusted publishing, because npm's OIDC
+# exchange still rejects this repository's immutable subject claims
+# (https://github.com/npm/cli/issues/9969). Keep the two files in step; delete this one and the
+# secret as soon as a rehearsal run of publish.yml gets past "Check trusted publishing".
 #
 #   "publish" unticked: the full test matrix, then `npm publish --dry-run` — a rehearsal.
 #   "publish" ticked:   the full test matrix, publish with provenance, push the `v<version>` tag.
 #
-# No token, no secret. npmjs.com lists this repo as a trusted publisher — provider GitHub
-# Actions, owner `vidux`, repository `laracrew`, workflow filename `publish.yml` (must match
-# this file's name exactly), no environment, direct publish allowed. Needs `id-token: write`
-# and npm CLI 11.5.1 or newer.
-#
-# Until npm accepts GitHub's immutable OIDC subject claims — this repository was created after
-# 2026-07-15, so its tokens carry `repo:vidux@<id>/laracrew@<id>:…` and the exchange answers
-# "package not found" (https://github.com/npm/cli/issues/9969) — this workflow stops at
-# "Check trusted publishing". Release with publish-token.yml in the meantime. A rehearsal run
-# of this file is the cheapest way to find out whether npm has fixed it; once it passes, delete
-# publish-token.yml and its NPM_TOKEN secret.
+# Setup: on npmjs.com create a Granular Access Token, read and write on `laracrew`, with
+# "Bypass two-factor authentication" ticked, and store it as the NPM_TOKEN repository secret
+# (Settings > Secrets and variables > Actions). The package's publishing-access setting must
+# stay on the option that allows bypass-2FA tokens. Such tokens lose direct publish around
+# January 2027; if npm has not fixed the exchange by then, the remaining route is
+# `npm stage publish` plus a 2FA approval on npmjs.com.
 
-name: publish
+name: publish (token)
 
 on:
   workflow_dispatch:
@@ -27,7 +28,7 @@ on:
         default: false
 
 concurrency:
-  group: release-${{ github.ref }} # shared with publish-token.yml: one release at a time
+  group: release-${{ github.ref }} # shared with publish.yml: one release at a time
   cancel-in-progress: false # never cancel a release mid-publish
 
 permissions:
@@ -41,16 +42,15 @@ jobs:
       contents: read
 
   publish:
-    name: ${{ inputs.publish && 'publish to npm' || 'rehearse publish (dry run)' }}
-    # Only this repository may publish: a fork that runs this workflow stops here, by name,
-    # rather than failing later at the OIDC exchange.
+    name: ${{ inputs.publish && 'publish to npm (token)' || 'rehearse publish (dry run, token)' }}
+    # Only this repository may publish: a fork that runs this workflow stops here, by name.
     if: github.repository == 'vidux/laracrew'
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write # push the release tag after a real publish
-      id-token: write # the OIDC exchange with npmjs.com, and provenance signing
+      id-token: write # provenance signing still uses the GitHub OIDC token
     env:
       REAL: ${{ inputs.publish && 'true' || 'false' }}
     steps:
@@ -63,17 +63,24 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false # npm's trusted-publishing docs: never cache in a release build
 
-      # Trusted publishing needs npm 11.5.1+; the npm bundled with Node may be older.
+      # Same npm as publish.yml, so the two files differ only in how they authenticate.
       - run: npm install -g npm@latest
 
       - run: npm ci
 
-      # Refuse to ship the wrong thing: a version with no CHANGELOG entry (CHANGELOG.md ships
-      # inside the tarball), or a version npm already has.
+      # Refuse to ship the wrong thing: no token to publish with, a version with no CHANGELOG
+      # entry (CHANGELOG.md ships inside the tarball), or a version npm already has.
       - name: Check the release
         id: release
         shell: bash
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::error::the NPM_TOKEN secret is not set — see the header of this workflow for how to create it"
+            exit 1
+          fi
+
           VERSION="$(node -p "require('./package.json').version")"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -92,36 +99,19 @@ jobs:
           fi
 
           if [ "$REAL" = "true" ]; then
-            echo "publishing laracrew $VERSION"
+            echo "publishing laracrew $VERSION with the NPM_TOKEN secret"
           else
             echo "rehearsing laracrew $VERSION (dry run)"
           fi
 
-      # The token exchange npm performs internally, done up front. When npm's own exchange is
-      # refused it falls back silently to setup-node's placeholder token and the publish dies
-      # with a misleading 404, so surface the registry's real reason here, before the build.
-      - name: Check trusted publishing
-        shell: bash
-        run: |
-          ID_TOKEN="$(curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" \
-            | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).value")"
-          STATUS="$(curl -sS -o exchange.json -w '%{http_code}' -X POST \
-            -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/json" \
-            "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/laracrew")"
-          if [ "$STATUS" != "200" ]; then
-            echo "::error::npm refused the trusted-publishing token exchange (HTTP $STATUS): $(cat exchange.json) — while npm/cli#9969 is open, release with the 'publish (token)' workflow instead"
-            rm -f exchange.json
-            exit 1
-          fi
-          rm -f exchange.json # holds a short-lived publish token; never print it
-          echo "trusted publishing: token exchange accepted for laracrew"
-
       # `npm publish` runs prepublishOnly (typecheck, test, build) itself — the same gate the
-      # release checklist requires — then packs from the `files` allowlist. Auth comes from the
-      # OIDC exchange with npmjs.com; nothing to pass here.
+      # release checklist requires — then packs from the `files` allowlist. npm still tries the
+      # OIDC exchange first; this file's name is not the trusted publisher's, so that is refused
+      # and the token is used, which is the point of this workflow.
       - name: Publish
         run: npm publish --provenance --access public ${{ env.REAL != 'true' && '--dry-run' || '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Create the tag at the commit that was just released so the CHANGELOG's release links
       # resolve. A push made with GITHUB_TOKEN does not trigger other workflows. The tagger
